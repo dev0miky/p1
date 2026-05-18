@@ -14,15 +14,15 @@ type Repo struct{}
 
 func NewRepo() *Repo { return &Repo{} }
 
-const leadFields = `id, tenant_id, list_id, campaign_id, phone_e164, first_name, last_name,
-  email, timezone, state_code, status, attempts, last_attempt_at, next_eligible_at,
-  custom_fields, created_at, updated_at`
+const leadFields = `id, tenant_id, list_id, campaign_id, phone_e164, dial_destination,
+  first_name, last_name, email, timezone, state_code, status, attempts,
+  last_attempt_at, next_eligible_at, custom_fields, created_at, updated_at`
 
 func scanLead(row pgx.Row, l *Lead) error {
 	return row.Scan(
-		&l.ID, &l.TenantID, &l.ListID, &l.CampaignID, &l.PhoneE164, &l.FirstName, &l.LastName,
-		&l.Email, &l.Timezone, &l.StateCode, &l.Status, &l.Attempts, &l.LastAttemptAt, &l.NextEligibleAt,
-		&l.CustomFields, &l.CreatedAt, &l.UpdatedAt,
+		&l.ID, &l.TenantID, &l.ListID, &l.CampaignID, &l.PhoneE164, &l.DialDestination,
+		&l.FirstName, &l.LastName, &l.Email, &l.Timezone, &l.StateCode, &l.Status, &l.Attempts,
+		&l.LastAttemptAt, &l.NextEligibleAt, &l.CustomFields, &l.CreatedAt, &l.UpdatedAt,
 	)
 }
 
@@ -36,12 +36,12 @@ func (r *Repo) CreateLeadTx(ctx context.Context, tx pgx.Tx, l Lead) (Lead, error
 	var out Lead
 	row := tx.QueryRow(ctx, `
 		INSERT INTO leads
-		  (tenant_id, list_id, campaign_id, phone_e164, first_name, last_name,
-		   email, timezone, state_code, status, custom_fields)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		  (tenant_id, list_id, campaign_id, phone_e164, dial_destination,
+		   first_name, last_name, email, timezone, state_code, status, custom_fields)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 		RETURNING `+leadFields,
-		l.TenantID, l.ListID, l.CampaignID, l.PhoneE164, l.FirstName, l.LastName,
-		l.Email, l.Timezone, l.StateCode, l.Status, l.CustomFields)
+		l.TenantID, l.ListID, l.CampaignID, l.PhoneE164, l.DialDestination,
+		l.FirstName, l.LastName, l.Email, l.Timezone, l.StateCode, l.Status, l.CustomFields)
 	return out, scanLead(row, &out)
 }
 
