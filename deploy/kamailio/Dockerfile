@@ -1,4 +1,4 @@
-FROM kamailio/kamailio:6.0
+FROM ghcr.io/kamailio/kamailio-ci:6.1.2-alpine
 
 COPY kamailio.cfg /etc/kamailio/kamailio.cfg
 COPY dispatcher.list /etc/kamailio/dispatcher.list

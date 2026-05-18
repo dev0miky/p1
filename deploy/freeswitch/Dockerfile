@@ -1,4 +1,4 @@
-FROM safarov/freeswitch:1.10
+FROM safarov/freeswitch:1.10.12
 
 COPY vars.xml /etc/freeswitch/vars.xml
 COPY autoload_configs/ /etc/freeswitch/autoload_configs/
