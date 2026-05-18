@@ -1,0 +1,47 @@
+{
+	email {$CADDY_EMAIL}
+}
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), geolocation=(), microphone=(self)"
+		-Server
+	}
+}
+
+app.{$P1_DOMAIN} {
+	import security_headers
+	reverse_proxy console:3001
+}
+
+agent.{$P1_DOMAIN} {
+	import security_headers
+	reverse_proxy agent:3002
+}
+
+api.{$P1_DOMAIN} {
+	import security_headers
+	reverse_proxy engine-api:8080
+	@websocket {
+		header Connection *Upgrade*
+		header Upgrade websocket
+	}
+	reverse_proxy @websocket engine-api:8080
+}
+
+wss.{$P1_DOMAIN} {
+	import security_headers
+	reverse_proxy https://host.docker.internal:7443 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+}
+
+:80 {
+	respond "p1" 200
+}
