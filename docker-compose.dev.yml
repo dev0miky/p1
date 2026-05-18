@@ -34,6 +34,10 @@ services:
     ports:
       - "8081:8081"
 
+  engine-dialer:
+    environment:
+      FREESWITCH_ESL_HOST: "172.18.0.1"
+
   console:
     image: node:20-alpine
     build: !reset null
