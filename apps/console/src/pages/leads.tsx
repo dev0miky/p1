@@ -162,8 +162,9 @@ function Row({ l, odd, onChanged }: { l: Lead; odd: boolean; onChanged: () => vo
 }
 
 function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
-  const [phone, setPhone] = useState("+1");
+  const [phone, setPhone] = useState("");
   const [dialDest, setDialDest] = useState("");
+  const phoneOptional = dialDest.trim() !== "";
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -183,7 +184,7 @@ function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
         first_name: firstName || undefined,
         last_name: lastName || undefined,
       });
-      setPhone("+1");
+      setPhone("");
       setDialDest("");
       setFirstName("");
       setLastName("");
@@ -198,8 +199,22 @@ function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
     <Modal open={open} onClose={onClose} title="Add lead">
       <form onSubmit={submit} className="space-y-6">
         <div>
-          <Label hint="E.164 format · US: +1XXXXXXXXXX · the compliance/audit identifier">Phone</Label>
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} required className="font-mono" placeholder="+15551234567" />
+          <Label
+            hint={
+              phoneOptional
+                ? "optional when dial destination is set · a placeholder is recorded for audit"
+                : "E.164 format · US: +1XXXXXXXXXX · the compliance/audit identifier"
+            }
+          >
+            Phone {phoneOptional && <span className="text-ink-700 font-mono text-2xs normal-case tracking-normal">(optional)</span>}
+          </Label>
+          <Input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            required={!phoneOptional}
+            className="font-mono"
+            placeholder="+15551234567"
+          />
         </div>
         <div>
           <Label hint="optional · sip user or extension to actually dial (test only — overrides phone)">

@@ -45,6 +45,28 @@ func TestLeadInvalidPhoneRejected(t *testing.T) {
 	}
 }
 
+func TestLeadCreateWithDialDestinationAllowsEmptyPhone(t *testing.T) {
+	s := newStack(t)
+	ctx := context.Background()
+	tn, _ := s.repo.CreateTenantAsSuperAdmin(ctx, tenant.Tenant{Slug: "ldd", Name: "x", SIPDomain: "ldd.sip"})
+
+	tok := s.tokenFor(t, 1, tn.ID, "tenant_owner")
+	w := s.do(t, "POST", "/tenant/leads/", tok, map[string]any{
+		"dial_destination": "mikephone",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d body=%s", w.Code, w.Body.String())
+	}
+	var got map[string]any
+	json.Unmarshal(w.Body.Bytes(), &got)
+	if got["dial_destination"] != "mikephone" {
+		t.Fatalf("dial_destination not stored: %v", got)
+	}
+	if got["phone_e164"] == "" || got["phone_e164"] == nil {
+		t.Fatalf("phone_e164 should be auto-populated, got %v", got["phone_e164"])
+	}
+}
+
 func TestLeadDuplicateInCampaignReturns409(t *testing.T) {
 	s := newStack(t)
 	ctx := context.Background()
