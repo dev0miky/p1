@@ -1,0 +1,88 @@
+# AI working files — never committed
+CLAUDE.md
+PLAN.md
+.claude/
+.cursor/
+.aider*
+.continue/
+.codeium/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+.secrets/
+
+# Go
+/engine/bin/
+/engine/dist/
+*.test
+*.out
+coverage.txt
+vendor/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+.vite/
+*.tsbuildinfo
+.pnpm-store/
+
+# Python (any helper scripts)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Logs
+*.log
+logs/
+
+# Runtime data
+tmp/
+recordings/
+*.wav
+*.mp3
+*.opus
+*.flac
+!deploy/freeswitch/sounds/**/*.wav
+
+# Postgres / databases
+*.dump
+*.sql.gz
+pgdata/
+redisdata/
+clickhousedata/
+miniodata/
+
+# Docker
+.docker/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Test artifacts
+test-results/
+playwright-report/
+.nyc_output/
+
+# Local overrides
+docker-compose.override.yml
+*.local.yml
+*.local.yaml
