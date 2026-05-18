@@ -87,6 +87,34 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type meResponse struct {
+	UserID   int64  `json:"user_id"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
+	TenantID *int64 `json:"tenant_id,omitempty"`
+	Status   string `json:"status"`
+}
+
+func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
+	claims, ok := ClaimsFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "no claims")
+		return
+	}
+	u, err := h.repo.GetUserByID(r.Context(), claims.UserID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, meResponse{
+		UserID:   u.ID,
+		Email:    u.Email,
+		Role:     u.Role,
+		TenantID: u.TenantID,
+		Status:   u.Status,
+	})
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

@@ -102,6 +102,30 @@ func (r *Repo) MarkUserLoggedIn(ctx context.Context, userID int64) error {
 	})
 }
 
+func (r *Repo) GetUserByID(ctx context.Context, id int64) (User, error) {
+	var u User
+	err := db.WithCtx(ctx, r.pool, db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
+		row := tx.QueryRow(ctx, `
+			SELECT id, tenant_id, email, role, password_hash, totp_secret, status, last_login_at, created_at, updated_at
+			FROM users WHERE id = $1
+		`, id)
+		err := row.Scan(&u.ID, &u.TenantID, &u.Email, &u.Role, &u.PasswordHash, &u.TOTPSecret, &u.Status, &u.LastLoginAt, &u.CreatedAt, &u.UpdatedAt)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	})
+	return u, err
+}
+
+func (r *Repo) AnySuperAdminExists(ctx context.Context) (bool, error) {
+	var exists bool
+	err := db.WithCtx(ctx, r.pool, db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE role = 'super_admin')`).Scan(&exists)
+	})
+	return exists, err
+}
+
 func (r *Repo) SetUserStatusAsSuperAdmin(ctx context.Context, email, status string) (User, error) {
 	var u User
 	err := db.WithCtx(ctx, r.pool, db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
