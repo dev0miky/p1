@@ -36,6 +36,7 @@ func run() error {
 	gateway := envOr("DIALER_GATEWAY", "loopback")
 	nodeID := envOr("DIALER_NODE_ID", "")
 	forceDest := os.Getenv("DIALER_FORCE_DEST")
+	testPlayback := os.Getenv("DIALER_TEST_PLAYBACK")
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -56,12 +57,13 @@ func run() error {
 	defer client.Close()
 
 	svc := dialer.New(dialer.Config{
-		Pool:        pool,
-		ESL:         client,
-		NodeID:      nodeID,
-		GatewayName: gateway,
-		ForceDest:   forceDest,
-		Logger:      logger,
+		Pool:         pool,
+		ESL:          client,
+		NodeID:       nodeID,
+		GatewayName:  gateway,
+		ForceDest:    forceDest,
+		TestPlayback: testPlayback,
+		Logger:       logger,
 	})
 
 	logger.Info("dialer starting", "addr", addr, "gateway", gateway)

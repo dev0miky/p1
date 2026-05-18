@@ -163,15 +163,15 @@ function Row({ l, odd, onChanged }: { l: Lead; odd: boolean; onChanged: () => vo
 
 function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const [phone, setPhone] = useState("+1");
+  const [dialDest, setDialDest] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
-  const create = useApiMutation<Lead, { phone_e164: string; first_name?: string; last_name?: string }>(
-    "/tenant/leads/",
-    "POST",
-    { invalidate: ["leads"] }
-  );
+  const create = useApiMutation<
+    Lead,
+    { phone_e164: string; dial_destination?: string; first_name?: string; last_name?: string }
+  >("/tenant/leads/", "POST", { invalidate: ["leads"] });
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -179,10 +179,12 @@ function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
     try {
       await create.mutateAsync({
         phone_e164: phone,
+        dial_destination: dialDest || undefined,
         first_name: firstName || undefined,
         last_name: lastName || undefined,
       });
       setPhone("+1");
+      setDialDest("");
       setFirstName("");
       setLastName("");
       onCreated();
@@ -196,8 +198,19 @@ function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
     <Modal open={open} onClose={onClose} title="Add lead">
       <form onSubmit={submit} className="space-y-6">
         <div>
-          <Label hint="E.164 format · US: +1XXXXXXXXXX">Phone</Label>
+          <Label hint="E.164 format · US: +1XXXXXXXXXX · the compliance/audit identifier">Phone</Label>
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} required className="font-mono" placeholder="+15551234567" />
+        </div>
+        <div>
+          <Label hint="optional · sip user or extension to actually dial (test only — overrides phone)">
+            Dial destination
+          </Label>
+          <Input
+            value={dialDest}
+            onChange={(e) => setDialDest(e.target.value)}
+            className="font-mono"
+            placeholder="mikephone"
+          />
         </div>
         <div className="grid grid-cols-2 gap-5">
           <div>

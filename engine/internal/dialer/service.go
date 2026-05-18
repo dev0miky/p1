@@ -28,6 +28,7 @@ type Config struct {
 	NodeID           string
 	GatewayName      string
 	ForceDest        string
+	TestPlayback     string
 	OriginateTimeout time.Duration
 	TickInterval     time.Duration
 	JanitorInterval  time.Duration
@@ -238,15 +239,21 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 	}
 
 	dest := l.PhoneE164
-	if s.cfg.ForceDest != "" {
+	if l.DialDestination != nil && *l.DialDestination != "" {
+		dest = *l.DialDestination
+	} else if s.cfg.ForceDest != "" {
 		dest = s.cfg.ForceDest
+	}
+	action := "&park"
+	if s.cfg.TestPlayback != "" {
+		action = "&playback(" + s.cfg.TestPlayback + ")"
 	}
 	octx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	jobUUID, err := s.cfg.ESL.Originate(octx, esl.OriginateParams{
 		Vars:    vars,
 		Gateway: s.cfg.GatewayName,
 		Dest:    dest,
-		Action:  "&park",
+		Action:  action,
 	})
 	cancel()
 	if err != nil {
