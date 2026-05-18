@@ -52,7 +52,7 @@ seed: ## seed super_admin + sample tenant
 	$(COMPOSE) run --rm engine-api /app/api seed
 
 test: ## run all tests
-	cd engine && go test ./...
+	cd engine && go test -count=1 -p 1 ./...
 	cd apps/console && npm test --silent
 	cd apps/agent && npm test --silent
 

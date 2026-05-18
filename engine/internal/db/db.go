@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -24,7 +25,37 @@ type Ctx struct {
 	Role     string
 }
 
+var validRoles = map[string]bool{
+	"super_admin":      true,
+	"tenant_owner":     true,
+	"tenant_admin":     true,
+	"campaign_manager": true,
+	"agent":            true,
+	"viewer":           true,
+}
+
+var ErrInvalidRole = errors.New("invalid role")
+
+func validateRole(role string) error {
+	if role == "" {
+		return fmt.Errorf("%w: empty", ErrInvalidRole)
+	}
+	if !validRoles[role] {
+		return fmt.Errorf("%w: %q", ErrInvalidRole, role)
+	}
+	return nil
+}
+
+func isInvalidRoleErr(err error) bool {
+	return errors.Is(err, ErrInvalidRole)
+}
+
 func WithCtx(ctx context.Context, pool *Pool, c Ctx, fn func(pgx.Tx) error) error {
+	if c.Role != "" {
+		if err := validateRole(c.Role); err != nil {
+			return err
+		}
+	}
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return err
