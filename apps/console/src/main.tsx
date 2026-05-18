@@ -1,7 +1,5 @@
 import ReactDOM from "react-dom/client";
-
-function App() {
-  return <main style={{ fontFamily: "system-ui", padding: 24 }}>console</main>;
-}
+import { App } from "@/app";
+import "@/styles/globals.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
