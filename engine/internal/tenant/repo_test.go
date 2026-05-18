@@ -2,73 +2,19 @@ package tenant_test
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"net/url"
-	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"p1/engine/internal/db"
 	"p1/engine/internal/tenant"
-	"p1/engine/migrations"
+	"p1/engine/internal/testutil"
 )
 
 func testPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL not set")
-	}
-	ctx := context.Background()
-
-	sqlDB, err := sql.Open("pgx", url)
-	if err != nil {
-		t.Fatalf("sql open: %v", err)
-	}
-	if _, err := sqlDB.Exec(`DROP TABLE IF EXISTS goose_db_version, users, tenants CASCADE`); err != nil {
-		t.Fatalf("drop tables: %v", err)
-	}
-	if _, err := sqlDB.Exec(`
-		DO $$ BEGIN
-			CREATE ROLE app_user LOGIN PASSWORD 'app_user_change_me' NOSUPERUSER;
-		EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-	`); err != nil {
-		t.Fatalf("create role: %v", err)
-	}
-	if _, err := sqlDB.Exec(`
-		GRANT CONNECT ON DATABASE test TO app_user;
-		GRANT USAGE ON SCHEMA public TO app_user;
-	`); err != nil {
-		t.Fatalf("grant: %v", err)
-	}
-	if err := db.Migrate(sqlDB, migrations.FS, "."); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	sqlDB.Close()
-
-	appURL, err := rewriteUser(url, "app_user", "app_user_change_me")
-	if err != nil {
-		t.Fatalf("rewrite url: %v", err)
-	}
-	pool, err := pgxpool.New(ctx, appURL)
-	if err != nil {
-		t.Fatalf("pool: %v", err)
-	}
-	t.Cleanup(func() { pool.Close() })
-	return pool
-}
-
-func rewriteUser(connURL, user, password string) (string, error) {
-	u, err := url.Parse(connURL)
-	if err != nil {
-		return "", err
-	}
-	u.User = url.UserPassword(user, password)
-	return u.String(), nil
+	return testutil.TestPool(t)
 }
 
 func TestCreateAndGetTenant(t *testing.T) {

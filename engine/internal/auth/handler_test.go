@@ -3,61 +3,20 @@ package auth_test
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	_ "github.com/jackc/pgx/v5/stdlib"
-
 	"p1/engine/internal/auth"
-	"p1/engine/internal/db"
 	"p1/engine/internal/tenant"
-	"p1/engine/migrations"
+	"p1/engine/internal/testutil"
 )
 
 func setupHandler(t *testing.T) (*auth.Handler, *auth.Issuer, *tenant.Repo) {
 	t.Helper()
-	connURL := os.Getenv("TEST_DATABASE_URL")
-	if connURL == "" {
-		t.Skip("TEST_DATABASE_URL not set")
-	}
-	ctx := context.Background()
-
-	sqlDB, err := sql.Open("pgx", connURL)
-	if err != nil {
-		t.Fatalf("sql open: %v", err)
-	}
-	if _, err := sqlDB.Exec(`DROP TABLE IF EXISTS goose_db_version, users, tenants CASCADE`); err != nil {
-		t.Fatalf("drop: %v", err)
-	}
-	if _, err := sqlDB.Exec(`
-		DO $$ BEGIN
-			CREATE ROLE app_user LOGIN PASSWORD 'app_user_change_me' NOSUPERUSER;
-		EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-		GRANT CONNECT ON DATABASE test TO app_user;
-		GRANT USAGE ON SCHEMA public TO app_user;
-	`); err != nil {
-		t.Fatalf("role: %v", err)
-	}
-	if err := db.Migrate(sqlDB, migrations.FS, "."); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	sqlDB.Close()
-
-	u, _ := url.Parse(connURL)
-	u.User = url.UserPassword("app_user", "app_user_change_me")
-	pool, err := pgxpool.New(ctx, u.String())
-	if err != nil {
-		t.Fatalf("pool: %v", err)
-	}
-	t.Cleanup(func() { pool.Close() })
-
+	pool := testutil.TestPool(t)
 	repo := tenant.NewRepo(pool)
 	iss := auth.NewIssuer([]byte("test-secret-32-bytes-long-aaaaaa"), "p1", time.Hour)
 	h := auth.NewHandler(repo, iss)

@@ -18,44 +18,106 @@ func NewRepo(pool *pgxpool.Pool) *Repo {
 	return &Repo{pool: pool}
 }
 
+func (r *Repo) Pool() *pgxpool.Pool { return r.pool }
+
+func (r *Repo) CreateTenantTx(ctx context.Context, tx pgx.Tx, t Tenant) (Tenant, error) {
+	var out Tenant
+	row := tx.QueryRow(ctx, `
+		INSERT INTO tenants (slug, name, sip_domain)
+		VALUES ($1, $2, $3)
+		RETURNING id, slug, name, sip_domain, status, created_at, updated_at
+	`, t.Slug, t.Name, t.SIPDomain)
+	err := row.Scan(&out.ID, &out.Slug, &out.Name, &out.SIPDomain, &out.Status, &out.CreatedAt, &out.UpdatedAt)
+	return out, err
+}
+
 func (r *Repo) CreateTenantAsSuperAdmin(ctx context.Context, t Tenant) (Tenant, error) {
 	var out Tenant
 	err := db.WithCtx(ctx, r.pool, db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
-		row := tx.QueryRow(ctx, `
-			INSERT INTO tenants (slug, name, sip_domain)
-			VALUES ($1, $2, $3)
-			RETURNING id, slug, name, sip_domain, status, created_at, updated_at
-		`, t.Slug, t.Name, t.SIPDomain)
-		return row.Scan(&out.ID, &out.Slug, &out.Name, &out.SIPDomain, &out.Status, &out.CreatedAt, &out.UpdatedAt)
+		var err error
+		out, err = r.CreateTenantTx(ctx, tx, t)
+		return err
 	})
+	return out, err
+}
+
+func (r *Repo) GetTenantTx(ctx context.Context, tx pgx.Tx, id int64) (Tenant, error) {
+	var out Tenant
+	row := tx.QueryRow(ctx, `
+		SELECT id, slug, name, sip_domain, status, created_at, updated_at
+		FROM tenants WHERE id = $1
+	`, id)
+	err := row.Scan(&out.ID, &out.Slug, &out.Name, &out.SIPDomain, &out.Status, &out.CreatedAt, &out.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return out, ErrNotFound
+	}
 	return out, err
 }
 
 func (r *Repo) GetTenantAsSuperAdmin(ctx context.Context, id int64) (Tenant, error) {
 	var out Tenant
 	err := db.WithCtx(ctx, r.pool, db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
-		row := tx.QueryRow(ctx, `
-			SELECT id, slug, name, sip_domain, status, created_at, updated_at
-			FROM tenants WHERE id = $1
-		`, id)
-		err := row.Scan(&out.ID, &out.Slug, &out.Name, &out.SIPDomain, &out.Status, &out.CreatedAt, &out.UpdatedAt)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
+		var err error
+		out, err = r.GetTenantTx(ctx, tx, id)
 		return err
 	})
+	return out, err
+}
+
+func (r *Repo) ListTenantsTx(ctx context.Context, tx pgx.Tx) ([]Tenant, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT id, slug, name, sip_domain, status, created_at, updated_at
+		FROM tenants ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Tenant
+	for rows.Next() {
+		var t Tenant
+		if err := rows.Scan(&t.ID, &t.Slug, &t.Name, &t.SIPDomain, &t.Status, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repo) UpdateTenantTx(ctx context.Context, tx pgx.Tx, id int64, name, status string) (Tenant, error) {
+	var out Tenant
+	row := tx.QueryRow(ctx, `
+		UPDATE tenants
+		SET name = COALESCE(NULLIF($1, ''), name),
+		    status = COALESCE(NULLIF($2, ''), status),
+		    updated_at = now()
+		WHERE id = $3
+		RETURNING id, slug, name, sip_domain, status, created_at, updated_at
+	`, name, status, id)
+	err := row.Scan(&out.ID, &out.Slug, &out.Name, &out.SIPDomain, &out.Status, &out.CreatedAt, &out.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return out, ErrNotFound
+	}
+	return out, err
+}
+
+func (r *Repo) CreateUserTx(ctx context.Context, tx pgx.Tx, u User) (User, error) {
+	var out User
+	row := tx.QueryRow(ctx, `
+		INSERT INTO users (tenant_id, email, role, password_hash, totp_secret)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, tenant_id, email, role, password_hash, totp_secret, status, last_login_at, created_at, updated_at
+	`, u.TenantID, u.Email, u.Role, u.PasswordHash, u.TOTPSecret)
+	err := row.Scan(&out.ID, &out.TenantID, &out.Email, &out.Role, &out.PasswordHash, &out.TOTPSecret, &out.Status, &out.LastLoginAt, &out.CreatedAt, &out.UpdatedAt)
 	return out, err
 }
 
 func (r *Repo) CreateUserAsSuperAdmin(ctx context.Context, u User) (User, error) {
 	var out User
 	err := db.WithCtx(ctx, r.pool, db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
-		row := tx.QueryRow(ctx, `
-			INSERT INTO users (tenant_id, email, role, password_hash, totp_secret)
-			VALUES ($1, $2, $3, $4, $5)
-			RETURNING id, tenant_id, email, role, password_hash, totp_secret, status, last_login_at, created_at, updated_at
-		`, u.TenantID, u.Email, u.Role, u.PasswordHash, u.TOTPSecret)
-		return row.Scan(&out.ID, &out.TenantID, &out.Email, &out.Role, &out.PasswordHash, &out.TOTPSecret, &out.Status, &out.LastLoginAt, &out.CreatedAt, &out.UpdatedAt)
+		var err error
+		out, err = r.CreateUserTx(ctx, tx, u)
+		return err
 	})
 	return out, err
 }
