@@ -27,6 +27,8 @@ coverage.txt
 vendor/
 
 # Node / frontend
+deploy/freeswitch/sip_profiles/external/*.xml
+
 node_modules/
 dist/
 build/
