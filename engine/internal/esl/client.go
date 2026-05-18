@@ -23,6 +23,7 @@ type Client struct {
 	conn     atomic.Pointer[eslgo.Conn]
 	mu       sync.Mutex
 	handler  Handler
+	subs     []string
 	closed   atomic.Bool
 }
 
@@ -40,11 +41,19 @@ func (c *Client) connect(ctx context.Context) error {
 		return fmt.Errorf("esl dial %s: %w", c.addr, err)
 	}
 	c.conn.Store(conn)
-	if c.handler != nil {
+	c.mu.Lock()
+	hasHandler := c.handler != nil
+	subs := append([]string(nil), c.subs...)
+	c.mu.Unlock()
+	if hasHandler {
 		conn.RegisterEventListener(eslgo.EventListenAll, c.dispatch)
 	}
 	c.logger.Info("esl connected", "addr", c.addr)
-	_ = ctx
+	if len(subs) > 0 {
+		if err := c.subscribeConn(ctx, conn, subs); err != nil {
+			c.logger.Warn("esl re-subscribe failed", "err", err)
+		}
+	}
 	return nil
 }
 
@@ -85,6 +94,11 @@ func (c *Client) dispatch(evt *eslgo.Event) {
 	c.mu.Lock()
 	h := c.handler
 	c.mu.Unlock()
+	name := ""
+	if vals, ok := evt.Headers["Event-Name"]; ok && len(vals) > 0 {
+		name = vals[0]
+	}
+	c.logger.Debug("esl event", "name", name, "handler_nil", h == nil)
 	if h == nil {
 		return
 	}
@@ -102,6 +116,16 @@ func (c *Client) Subscribe(ctx context.Context, events ...string) error {
 	if conn == nil {
 		return errors.New("esl: not connected")
 	}
+	if err := c.subscribeConn(ctx, conn, events); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.subs = append([]string(nil), events...)
+	c.mu.Unlock()
+	return nil
+}
+
+func (c *Client) subscribeConn(ctx context.Context, conn *eslgo.Conn, events []string) error {
 	res, err := conn.SendCommand(ctx, command.Event{Format: "plain", Listen: events})
 	if err != nil {
 		return err
