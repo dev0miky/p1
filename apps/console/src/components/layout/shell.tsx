@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { Brand } from "@/components/brand";
 
@@ -6,23 +7,24 @@ interface NavItem {
   label: string;
   href: string;
   badge?: string | number;
-  disabled?: boolean;
 }
 
 const tenantNav: NavItem[] = [
   { label: "Overview", href: "/" },
-  { label: "Campaigns", href: "/campaigns", disabled: true },
-  { label: "Leads", href: "/leads", disabled: true },
-  { label: "Agents", href: "/agents", disabled: true },
-  { label: "DNC", href: "/dnc", disabled: true },
-  { label: "Reports", href: "/reports", disabled: true },
+  { label: "Campaigns", href: "/campaigns" },
+  { label: "Leads", href: "/leads" },
+  { label: "Agents", href: "/agents" },
+  { label: "DNC", href: "/dnc" },
+  { label: "Users", href: "/users" },
+  { label: "Reports", href: "/reports" },
 ];
 
 const adminNav: NavItem[] = [
-  { label: "Tenants", href: "/admin/tenants", disabled: true },
-  { label: "Carriers", href: "/admin/carriers", disabled: true },
-  { label: "DIDs", href: "/admin/dids", disabled: true },
-  { label: "Traceback", href: "/admin/traceback", disabled: true, badge: 0 },
+  { label: "Overview", href: "/" },
+  { label: "Tenants", href: "/admin/tenants" },
+  { label: "Carriers", href: "/admin/carriers" },
+  { label: "DIDs", href: "/admin/dids" },
+  { label: "Traceback", href: "/admin/traceback", badge: 0 },
 ];
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -80,30 +82,30 @@ export function Shell({ children }: { children: ReactNode }) {
 }
 
 function NavSection({ title, items }: { title: string; items: NavItem[] }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
     <div>
       <div className="px-5 mb-3 font-mono text-2xs uppercase tracking-widest text-ink-700">{title}</div>
       <ul>
-        {items.map((item) => (
-          <li key={item.href}>
-            <a
-              href={item.disabled ? undefined : item.href}
-              aria-disabled={item.disabled}
-              className={`
-                group relative flex items-center justify-between px-5 h-9 text-sm
-                ${item.disabled ? "text-ink-700 cursor-not-allowed" : "text-ink-900 hover:text-ink-950 hover:bg-ink-200"}
-              `}
-            >
-              <span className="flex items-center gap-3">
-                <span className={`w-0.5 h-4 ${item.href === "/" ? "bg-phosphor" : "bg-transparent"} group-hover:bg-ink-600`} aria-hidden />
-                {item.label}
-              </span>
-              {item.badge !== undefined && (
-                <span className="font-mono text-2xs text-ink-700">{item.badge}</span>
-              )}
-            </a>
-          </li>
-        ))}
+        {items.map((item) => {
+          const active = pathname === item.href;
+          return (
+            <li key={item.href}>
+              <Link
+                to={item.href}
+                className="group relative flex items-center justify-between px-5 h-9 text-sm text-ink-900 hover:text-ink-950 hover:bg-ink-200"
+              >
+                <span className="flex items-center gap-3">
+                  <span className={`w-0.5 h-4 ${active ? "bg-phosphor" : "bg-transparent"} group-hover:bg-ink-600`} aria-hidden />
+                  <span className={active ? "text-ink-950" : ""}>{item.label}</span>
+                </span>
+                {item.badge !== undefined && (
+                  <span className="font-mono text-2xs text-ink-700">{item.badge}</span>
+                )}
+              </Link>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
