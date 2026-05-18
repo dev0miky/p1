@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -148,6 +149,7 @@ func (a *tenantLeads) create(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "lead already exists in campaign")
 			return
 		}
+		slog.Error("lead create failed", "err", err, "tenant_id", tid, "phone", req.PhoneE164, "req_id", middleware.GetReqID(r.Context()))
 		writeError(w, http.StatusInternalServerError, "create failed")
 		return
 	}
