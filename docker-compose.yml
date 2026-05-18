@@ -204,3 +204,116 @@ services:
     devices:
       - /dev/kmsg
     networks: [app]
+
+  engine-api:
+    build:
+      context: ./engine
+      args:
+        BINARY: api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: "8080"
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      REDIS_URL: "redis://redis:6379"
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER}
+      JWT_TTL_MINUTES: ${JWT_TTL_MINUTES}
+      FREESWITCH_ESL_HOST: host.docker.internal
+      FREESWITCH_ESL_PORT: ${FREESWITCH_ESL_PORT}
+      FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD}
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET_RECORDINGS: ${MINIO_BUCKET_RECORDINGS}
+      LOG_LEVEL: ${LOG_LEVEL}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [app]
+
+  engine-dialer:
+    build:
+      context: ./engine
+      args:
+        BINARY: dialer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      REDIS_URL: "redis://redis:6379"
+      FREESWITCH_ESL_HOST: host.docker.internal
+      FREESWITCH_ESL_PORT: ${FREESWITCH_ESL_PORT}
+      FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD}
+      LOG_LEVEL: ${LOG_LEVEL}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [app]
+
+  engine-cdr-ingest:
+    build:
+      context: ./engine
+      args:
+        BINARY: cdr-ingest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: "8081"
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      LOG_LEVEL: ${LOG_LEVEL}
+    networks: [app]
+
+  engine-recording-uploader:
+    build:
+      context: ./engine
+      args:
+        BINARY: recording-uploader
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET_RECORDINGS: ${MINIO_BUCKET_RECORDINGS}
+      LOG_LEVEL: ${LOG_LEVEL}
+    networks: [app]
+
+  engine-dnc-sync:
+    build:
+      context: ./engine
+      args:
+        BINARY: dnc-sync
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      REDIS_URL: "redis://redis:6379"
+      LOG_LEVEL: ${LOG_LEVEL}
+    networks: [app]
+
+  console:
+    build:
+      context: ./apps/console
+    restart: unless-stopped
+    networks: [app]
+
+  agent:
+    build:
+      context: ./apps/agent
+    restart: unless-stopped
+    networks: [app]
