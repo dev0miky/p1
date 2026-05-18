@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"testing"
 
 	"p1/engine/internal/tenant"
@@ -42,6 +43,49 @@ func TestLeadInvalidPhoneRejected(t *testing.T) {
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("phone %q: want 400, got %d", p, w.Code)
 		}
+	}
+}
+
+func TestLeadAttachToCampaignViaPatch(t *testing.T) {
+	s := newStack(t)
+	ctx := context.Background()
+	tn, _ := s.repo.CreateTenantAsSuperAdmin(ctx, tenant.Tenant{Slug: "lac", Name: "x", SIPDomain: "lac.sip"})
+	tok := s.tokenFor(t, 1, tn.ID, "tenant_owner")
+
+	w := s.do(t, "POST", "/tenant/campaigns/", tok, map[string]any{"name": "C1", "mode": "press1"})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create campaign: %d %s", w.Code, w.Body.String())
+	}
+	var camp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &camp)
+	campID := int64(camp["id"].(float64))
+
+	w = s.do(t, "POST", "/tenant/leads/", tok, map[string]any{"phone_e164": "+15554443333"})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create lead: %d %s", w.Code, w.Body.String())
+	}
+	var L map[string]any
+	json.Unmarshal(w.Body.Bytes(), &L)
+	leadID := int64(L["id"].(float64))
+
+	w = s.do(t, "PATCH", "/tenant/leads/"+strconv.FormatInt(leadID, 10), tok, map[string]any{"campaign_id": campID})
+	if w.Code != http.StatusOK {
+		t.Fatalf("patch: %d %s", w.Code, w.Body.String())
+	}
+	var got map[string]any
+	json.Unmarshal(w.Body.Bytes(), &got)
+	if int64(got["campaign_id"].(float64)) != campID {
+		t.Fatalf("campaign_id not updated: %v", got)
+	}
+
+	w = s.do(t, "PATCH", "/tenant/leads/"+strconv.FormatInt(leadID, 10), tok, map[string]any{"campaign_id": nil})
+	if w.Code != http.StatusOK {
+		t.Fatalf("detach: %d %s", w.Code, w.Body.String())
+	}
+	var after map[string]any
+	json.Unmarshal(w.Body.Bytes(), &after)
+	if v, ok := after["campaign_id"]; ok && v != nil {
+		t.Fatalf("campaign_id should be nil after detach: %v", v)
 	}
 }
 

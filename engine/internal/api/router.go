@@ -108,6 +108,7 @@ func NewRouter(cfg Config) http.Handler {
 		r.Post("/", tenL.create)
 		r.Get("/", tenL.list)
 		r.Get("/{id}", tenL.get)
+		r.Patch("/{id}", tenL.update)
 		r.Delete("/{id}", tenL.delete)
 	})
 

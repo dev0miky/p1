@@ -23,6 +23,12 @@ interface ListResp {
   offset: number;
 }
 
+interface Campaign {
+  id: number;
+  name: string;
+  status: string;
+}
+
 const PAGE = 50;
 
 export function LeadsPage() {
@@ -33,6 +39,8 @@ export function LeadsPage() {
     ["leads", offset],
     `/tenant/leads/?limit=${PAGE}&offset=${offset}`,
   );
+  const campaigns = useApiQuery<{ campaigns: Campaign[] }>(["campaigns-for-leads"], "/tenant/campaigns/");
+  const campaignOptions = campaigns.data?.campaigns ?? [];
 
   const total = list.data?.total ?? 0;
   const showing = list.data?.leads?.length ?? 0;
@@ -74,7 +82,7 @@ export function LeadsPage() {
       {list.error && <div className="mt-6"><ErrorBanner>{(list.error as ApiError).message}</ErrorBanner></div>}
 
       {list.data && list.data.leads?.length ? (
-        <Table data={list.data.leads} onChanged={() => list.refetch()} />
+        <Table data={list.data.leads} campaigns={campaignOptions} onChanged={() => list.refetch()} />
       ) : list.data ? (
         <EmptyState
           title="no leads yet"
@@ -83,23 +91,23 @@ export function LeadsPage() {
         />
       ) : null}
 
-      <CreateModal open={creating} onClose={() => setCreating(false)} onCreated={() => list.refetch()} />
+      <CreateModal open={creating} campaigns={campaignOptions} onClose={() => setCreating(false)} onCreated={() => list.refetch()} />
     </div>
   );
 }
 
-function Table({ data, onChanged }: { data: Lead[]; onChanged: () => void }) {
+function Table({ data, campaigns, onChanged }: { data: Lead[]; campaigns: Campaign[]; onChanged: () => void }) {
   return (
     <div className="mt-6 surface overflow-hidden">
-      <div className="grid grid-cols-[2fr_2fr_1fr_1fr_1.2fr_5rem] gap-px bg-ink-400 border-b border-ink-400">
-        {["Phone", "Name", "Status", "Attempts", "Added", ""].map((h) => (
+      <div className="grid grid-cols-[1.6fr_1.6fr_1.6fr_1fr_0.8fr_1.2fr_5rem] gap-px bg-ink-400 border-b border-ink-400">
+        {["Phone", "Name", "Campaign", "Status", "Attempts", "Added", ""].map((h) => (
           <div key={h} className="bg-ink-100 px-5 py-3 font-mono text-2xs uppercase tracking-widest text-ink-700">
             {h}
           </div>
         ))}
       </div>
       {data.map((l, idx) => (
-        <Row key={l.id} l={l} odd={idx % 2 === 1} onChanged={onChanged} />
+        <Row key={l.id} l={l} campaigns={campaigns} odd={idx % 2 === 1} onChanged={onChanged} />
       ))}
     </div>
   );
@@ -123,22 +131,40 @@ function statusKind(s: string) {
   }
 }
 
-function Row({ l, odd, onChanged }: { l: Lead; odd: boolean; onChanged: () => void }) {
+function Row({ l, campaigns, odd, onChanged }: { l: Lead; campaigns: Campaign[]; odd: boolean; onChanged: () => void }) {
   const del = useApiMutation<void, void>(`/tenant/leads/${l.id}`, "DELETE", {
     invalidate: ["leads"],
     onSuccess: () => onChanged(),
   });
+  const patch = useApiMutation<Lead, { campaign_id: number | null }>(
+    `/tenant/leads/${l.id}`,
+    "PATCH",
+    { invalidate: ["leads"], onSuccess: () => onChanged() },
+  );
   const bg = odd ? "bg-ink-50" : "bg-ink-100";
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18 }}
-      className="grid grid-cols-[2fr_2fr_1fr_1fr_1.2fr_5rem] gap-px bg-ink-400 border-b border-ink-400 last:border-b-0"
+      className="grid grid-cols-[1.6fr_1.6fr_1.6fr_1fr_0.8fr_1.2fr_5rem] gap-px bg-ink-400 border-b border-ink-400 last:border-b-0"
     >
       <div className={`${bg} px-5 py-4 data-cell text-ink-950`}>{l.phone_e164}</div>
       <div className={`${bg} px-5 py-4 text-sm text-ink-900`}>
         {[l.first_name, l.last_name].filter(Boolean).join(" ") || <span className="text-ink-700">—</span>}
+      </div>
+      <div className={`${bg} px-5 py-2 flex items-center`}>
+        <select
+          value={l.campaign_id ?? ""}
+          disabled={patch.isPending}
+          onChange={(e) => patch.mutate({ campaign_id: e.target.value === "" ? null : Number(e.target.value) })}
+          className="w-full bg-transparent font-mono text-2xs uppercase tracking-widest text-ink-900 border border-ink-400 rounded px-2 py-1.5 hover:border-ink-700 focus:outline-none focus:border-accent disabled:opacity-50"
+        >
+          <option value="">— none —</option>
+          {campaigns.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
       </div>
       <div className={`${bg} px-5 py-4 flex items-center gap-2`}>
         <StatusDot kind={statusKind(l.status)} />
@@ -161,17 +187,18 @@ function Row({ l, odd, onChanged }: { l: Lead; odd: boolean; onChanged: () => vo
   );
 }
 
-function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+function CreateModal({ open, campaigns, onClose, onCreated }: { open: boolean; campaigns: Campaign[]; onClose: () => void; onCreated: () => void }) {
   const [phone, setPhone] = useState("");
   const [dialDest, setDialDest] = useState("");
   const phoneOptional = dialDest.trim() !== "";
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [campaignId, setCampaignId] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
 
   const create = useApiMutation<
     Lead,
-    { phone_e164: string; dial_destination?: string; first_name?: string; last_name?: string }
+    { phone_e164: string; dial_destination?: string; first_name?: string; last_name?: string; campaign_id?: number }
   >("/tenant/leads/", "POST", { invalidate: ["leads"] });
 
   async function submit(e: FormEvent) {
@@ -183,11 +210,13 @@ function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
         dial_destination: dialDest || undefined,
         first_name: firstName || undefined,
         last_name: lastName || undefined,
+        campaign_id: campaignId === "" ? undefined : Number(campaignId),
       });
       setPhone("");
       setDialDest("");
       setFirstName("");
       setLastName("");
+      setCampaignId("");
       onCreated();
       onClose();
     } catch (e) {
@@ -226,6 +255,22 @@ function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
             className="font-mono"
             placeholder="mikephone"
           />
+        </div>
+        <div>
+          <Label hint={campaigns.length === 0 ? "no campaigns yet — create one first" : "attach to a campaign so the dialer can pick this lead up"}>
+            Campaign
+          </Label>
+          <select
+            value={campaignId}
+            onChange={(e) => setCampaignId(e.target.value)}
+            disabled={campaigns.length === 0}
+            className="w-full bg-ink-50 font-mono text-sm text-ink-950 border border-ink-400 rounded px-3 py-2 hover:border-ink-700 focus:outline-none focus:border-accent disabled:opacity-50"
+          >
+            <option value="">— none —</option>
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
         </div>
         <div className="grid grid-cols-2 gap-5">
           <div>

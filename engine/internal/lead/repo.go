@@ -107,6 +107,28 @@ func (r *Repo) ListLeadsTx(ctx context.Context, tx pgx.Tx, f ListFilter) ([]Lead
 	return out, total, rows.Err()
 }
 
+type LeadUpdate struct {
+	CampaignID  *int64
+	SetCampaign bool
+}
+
+func (r *Repo) UpdateLeadTx(ctx context.Context, tx pgx.Tx, id int64, u LeadUpdate) (Lead, error) {
+	var out Lead
+	if !u.SetCampaign {
+		return r.GetLeadTx(ctx, tx, id)
+	}
+	row := tx.QueryRow(ctx, `
+		UPDATE leads
+		   SET campaign_id = $2, updated_at = now()
+		 WHERE id = $1
+	 RETURNING `+leadFields, id, u.CampaignID)
+	err := scanLead(row, &out)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return out, ErrNotFound
+	}
+	return out, err
+}
+
 func (r *Repo) DeleteLeadTx(ctx context.Context, tx pgx.Tx, id int64) error {
 	tag, err := tx.Exec(ctx, `DELETE FROM leads WHERE id = $1`, id)
 	if err != nil {
