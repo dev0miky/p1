@@ -122,6 +122,56 @@ func (r *Repo) CreateUserAsSuperAdmin(ctx context.Context, u User) (User, error)
 	return out, err
 }
 
+func (r *Repo) ListUsersTx(ctx context.Context, tx pgx.Tx) ([]User, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT id, tenant_id, email, role, password_hash, totp_secret, status, last_login_at, created_at, updated_at
+		FROM users ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.TenantID, &u.Email, &u.Role, &u.PasswordHash, &u.TOTPSecret, &u.Status, &u.LastLoginAt, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repo) GetUserByIDTx(ctx context.Context, tx pgx.Tx, id int64) (User, error) {
+	var u User
+	row := tx.QueryRow(ctx, `
+		SELECT id, tenant_id, email, role, password_hash, totp_secret, status, last_login_at, created_at, updated_at
+		FROM users WHERE id = $1
+	`, id)
+	err := row.Scan(&u.ID, &u.TenantID, &u.Email, &u.Role, &u.PasswordHash, &u.TOTPSecret, &u.Status, &u.LastLoginAt, &u.CreatedAt, &u.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return u, ErrNotFound
+	}
+	return u, err
+}
+
+func (r *Repo) UpdateUserTx(ctx context.Context, tx pgx.Tx, id int64, role, status string) (User, error) {
+	var u User
+	row := tx.QueryRow(ctx, `
+		UPDATE users
+		SET role = COALESCE(NULLIF($1, ''), role),
+		    status = COALESCE(NULLIF($2, ''), status),
+		    updated_at = now()
+		WHERE id = $3
+		RETURNING id, tenant_id, email, role, password_hash, totp_secret, status, last_login_at, created_at, updated_at
+	`, role, status, id)
+	err := row.Scan(&u.ID, &u.TenantID, &u.Email, &u.Role, &u.PasswordHash, &u.TOTPSecret, &u.Status, &u.LastLoginAt, &u.CreatedAt, &u.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return u, ErrNotFound
+	}
+	return u, err
+}
+
 func (r *Repo) CountAllUsersAsSuperAdmin(ctx context.Context) (int, error) {
 	var n int
 	err := db.WithCtx(ctx, r.pool, db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
