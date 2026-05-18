@@ -109,6 +109,10 @@ func (a *tenantLeads) create(w http.ResponseWriter, r *http.Request) {
 
 	claims, _ := auth.ClaimsFromContext(r.Context())
 	tid := claims.TenantID
+	if tid <= 0 {
+		writeError(w, http.StatusBadRequest, "no tenant context — super admins cannot create tenant resources without a tenant scope; sign in as a tenant user")
+		return
+	}
 
 	l := lead.Lead{
 		TenantID:        tid,
