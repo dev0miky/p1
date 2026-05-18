@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"p1/engine/internal/api"
 	"p1/engine/internal/auth"
 	"p1/engine/internal/config"
 	"p1/engine/internal/db"
@@ -66,21 +67,17 @@ func serve(cfg config.Config, logger *slog.Logger) error {
 
 	repo := tenant.NewRepo(pool)
 	iss := auth.NewIssuer(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTTTL)
-	h := auth.NewHandler(repo, iss)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "ok")
+	handler := api.NewRouter(api.Config{
+		Repo:           repo,
+		Issuer:         iss,
+		Logger:         logger,
+		AllowedOrigins: cfg.AllowedOrigins,
 	})
-	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "# placeholder")
-	})
-	mux.HandleFunc("POST /auth/login", h.Login)
-	mux.Handle("GET /auth/me", auth.RequireAuth(iss)(http.HandlerFunc(h.Me)))
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           withLogging(logger, mux),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
@@ -135,7 +132,7 @@ func runSeed(cfg config.Config, logger *slog.Logger) error {
 	return nil
 }
 
-func newLogger(level string) *slog.Logger {
+func newLogger(level string) *slog.Logger { //nolint:unused
 	var l slog.Level
 	switch level {
 	case "debug":
@@ -150,26 +147,3 @@ func newLogger(level string) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: l}))
 }
 
-func withLogging(logger *slog.Logger, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		rw := &statusRecorder{ResponseWriter: w, status: 200}
-		next.ServeHTTP(rw, r)
-		logger.Info("req",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", rw.status,
-			"dur_ms", time.Since(start).Milliseconds(),
-		)
-	})
-}
-
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func (r *statusRecorder) WriteHeader(code int) {
-	r.status = code
-	r.ResponseWriter.WriteHeader(code)
-}

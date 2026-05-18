@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,7 @@ type Config struct {
 	SuperAdminEmail  string
 	SuperAdminPasswd string
 	LogLevel         string
+	AllowedOrigins   []string
 }
 
 func Load() (Config, error) {
@@ -39,6 +41,12 @@ func Load() (Config, error) {
 
 	ttlMin, _ := strconv.Atoi(getEnv("JWT_TTL_MINUTES", "60"))
 	c.JWTTTL = time.Duration(ttlMin) * time.Minute
+
+	if origins := os.Getenv("ALLOWED_ORIGINS"); origins != "" {
+		for _, o := range strings.Split(origins, ",") {
+			c.AllowedOrigins = append(c.AllowedOrigins, strings.TrimSpace(o))
+		}
+	}
 
 	if c.DatabaseURL == "" {
 		return c, fmt.Errorf("DATABASE_URL is required")
