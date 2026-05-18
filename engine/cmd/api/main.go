@@ -146,4 +146,3 @@ func newLogger(level string) *slog.Logger { //nolint:unused
 	}
 	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: l}))
 }
-

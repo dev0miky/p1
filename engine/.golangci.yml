@@ -1,0 +1,39 @@
+version: "2"
+
+run:
+  timeout: 5m
+  go: "1.25"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+    - bodyclose
+    - gocritic
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprintln
+        - fmt.Fprintf
+        - fmt.Fprint
+        - (*encoding/json.Encoder).Encode
+        - (github.com/jackc/pgx/v5.Tx).Rollback
+        - (*database/sql.DB).Close
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gocritic
+    paths:
+      - migrations
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

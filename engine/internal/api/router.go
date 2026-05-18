@@ -14,10 +14,10 @@ import (
 )
 
 type Config struct {
-	Repo            *tenant.Repo
-	Issuer          *auth.Issuer
-	Logger          *slog.Logger
-	AllowedOrigins  []string
+	Repo           *tenant.Repo
+	Issuer         *auth.Issuer
+	Logger         *slog.Logger
+	AllowedOrigins []string
 }
 
 func NewRouter(cfg Config) http.Handler {

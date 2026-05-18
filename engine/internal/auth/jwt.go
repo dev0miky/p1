@@ -70,7 +70,7 @@ func (i *Issuer) Verify(token string) (Claims, error) {
 		JTI:  stringClaim(mc, "jti"),
 	}
 	if v, ok := mc["sub"].(string); ok {
-		fmt.Sscanf(v, "%d", &c.UserID)
+		_, _ = fmt.Sscanf(v, "%d", &c.UserID)
 	}
 	if v, ok := mc["tenant_id"].(float64); ok {
 		c.TenantID = int64(v)

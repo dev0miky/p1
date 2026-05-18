@@ -36,25 +36,25 @@ type updateUserRequest struct {
 }
 
 type userResponse struct {
-	ID        int64   `json:"id"`
-	TenantID  *int64  `json:"tenant_id,omitempty"`
-	Email     string  `json:"email"`
-	Role      string  `json:"role"`
-	Status    string  `json:"status"`
-	CreatedAt string  `json:"created_at"`
-	UpdatedAt string  `json:"updated_at"`
+	ID           int64  `json:"id"`
+	TenantID     *int64 `json:"tenant_id,omitempty"`
+	Email        string `json:"email"`
+	Role         string `json:"role"`
+	Status       string `json:"status"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
 	TempPassword string `json:"temp_password,omitempty"`
 }
 
 func userToResponse(u tenant.User, tempPassword string) userResponse {
 	r := userResponse{
-		ID:        u.ID,
-		TenantID:  u.TenantID,
-		Email:     u.Email,
-		Role:      u.Role,
-		Status:    u.Status,
-		CreatedAt: u.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt: u.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ID:           u.ID,
+		TenantID:     u.TenantID,
+		Email:        u.Email,
+		Role:         u.Role,
+		Status:       u.Status,
+		CreatedAt:    u.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:    u.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		TempPassword: tempPassword,
 	}
 	return r
