@@ -1,0 +1,66 @@
+@import "@fontsource/ibm-plex-sans/300.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans-condensed/200.css";
+@import "@fontsource/ibm-plex-sans-condensed/300.css";
+@import "@fontsource/ibm-plex-sans-condensed/500.css";
+@import "@fontsource/ibm-plex-sans-condensed/600.css";
+@import "@fontsource/ibm-plex-mono/300.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  html, body, #root {
+    height: 100%;
+    background: #0A0A0A;
+  }
+  body {
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    color: #E8E8E8;
+    font-feature-settings: "kern", "liga", "calt";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: #7FE787;
+    color: #0A0A0A;
+  }
+  input, button, textarea, select {
+    font: inherit;
+  }
+  input:focus, button:focus, textarea:focus, select:focus {
+    outline: none;
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .field-label {
+    @apply text-2xs font-mono uppercase tracking-widest text-ink-700;
+  }
+  .hairline {
+    @apply border-ink-400;
+  }
+  .surface {
+    @apply bg-ink-100 border border-ink-400;
+  }
+  .status-dot {
+    @apply inline-block h-1.5 w-1.5 rounded-full;
+  }
+  .data-cell {
+    @apply font-mono text-sm tnum;
+  }
+  .focus-ring {
+    box-shadow: 0 0 0 1px #7FE787;
+  }
+}
