@@ -72,5 +72,16 @@ func NewRouter(cfg Config) http.Handler {
 		r.Patch("/{id}", adminU.update)
 	})
 
+	tenU := &tenantUsers{repo: cfg.Repo}
+	r.Route("/tenant/users", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireTenant)
+		r.Use(auth.RequireAction(auth.ActionManageUsers))
+		r.Post("/", tenU.create)
+		r.Get("/", tenU.list)
+		r.Get("/{id}", tenU.get)
+		r.Patch("/{id}", tenU.update)
+	})
+
 	return r
 }

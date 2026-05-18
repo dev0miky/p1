@@ -54,6 +54,21 @@ func RequireAction(a Action) func(http.Handler) http.Handler {
 	}
 }
 
+func RequireTenant(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := ClaimsFromContext(r.Context())
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if c.TenantID <= 0 {
+			http.Error(w, "tenant context required", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func bearerToken(r *http.Request) (string, bool) {
 	h := r.Header.Get("Authorization")
 	const prefix = "Bearer "
