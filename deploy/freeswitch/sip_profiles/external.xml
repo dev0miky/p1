@@ -1,5 +1,7 @@
 <profile name="external">
-  <gateways/>
+  <gateways>
+    <X-PRE-PROCESS cmd="include" data="external/*.xml"/>
+  </gateways>
   <aliases/>
   <domains>
     <domain name="all" alias="false" parse="false"/>
