@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/cors"
 
 	"p1/engine/internal/auth"
+	"p1/engine/internal/campaign"
 	"p1/engine/internal/tenant"
 )
 
@@ -81,6 +82,18 @@ func NewRouter(cfg Config) http.Handler {
 		r.Get("/", tenU.list)
 		r.Get("/{id}", tenU.get)
 		r.Patch("/{id}", tenU.update)
+	})
+
+	cRepo := campaign.NewRepo()
+	tenC := &tenantCampaigns{repo: cfg.Repo, cRepo: cRepo}
+	r.Route("/tenant/campaigns", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireTenant)
+		r.Use(auth.RequireAction(auth.ActionManageCampaigns))
+		r.Post("/", tenC.create)
+		r.Get("/", tenC.list)
+		r.Get("/{id}", tenC.get)
+		r.Patch("/{id}", tenC.update)
 	})
 
 	return r
