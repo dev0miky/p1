@@ -11,6 +11,7 @@ import (
 
 	"p1/engine/internal/auth"
 	"p1/engine/internal/campaign"
+	"p1/engine/internal/dnc"
 	"p1/engine/internal/lead"
 	"p1/engine/internal/tenant"
 )
@@ -107,6 +108,18 @@ func NewRouter(cfg Config) http.Handler {
 		r.Get("/", tenL.list)
 		r.Get("/{id}", tenL.get)
 		r.Delete("/{id}", tenL.delete)
+	})
+
+	dRepo := dnc.NewRepo()
+	tenD := &tenantDNC{repo: cfg.Repo, dRepo: dRepo}
+	r.Route("/tenant/dnc", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireTenant)
+		r.Use(auth.RequireAction(auth.ActionManageDNC))
+		r.Post("/", tenD.add)
+		r.Get("/", tenD.list)
+		r.Delete("/{phone}", tenD.remove)
+		r.Get("/check", tenD.check)
 	})
 
 	return r
