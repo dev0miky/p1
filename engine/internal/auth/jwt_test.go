@@ -74,7 +74,22 @@ func TestIssueRejectsZeroUserID(t *testing.T) {
 func TestIssueRejectsZeroTenantID(t *testing.T) {
 	iss := newTestIssuer(t)
 	if _, err := iss.Issue(Claims{UserID: 1, TenantID: 0, Role: "agent"}); err == nil {
-		t.Fatal("Issue should reject zero TenantID")
+		t.Fatal("Issue should reject zero TenantID for non-super_admin role")
+	}
+}
+
+func TestIssueAllowsZeroTenantIDForSuperAdmin(t *testing.T) {
+	iss := newTestIssuer(t)
+	tok, err := iss.Issue(Claims{UserID: 1, TenantID: 0, Role: "super_admin"})
+	if err != nil {
+		t.Fatalf("super_admin should be allowed without tenant: %v", err)
+	}
+	got, err := iss.Verify(tok)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if got.Role != "super_admin" {
+		t.Fatalf("role: %s", got.Role)
 	}
 }
 

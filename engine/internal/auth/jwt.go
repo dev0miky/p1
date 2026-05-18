@@ -30,11 +30,11 @@ func (i *Issuer) Issue(c Claims) (string, error) {
 	if c.UserID <= 0 {
 		return "", errors.New("UserID must be > 0")
 	}
-	if c.TenantID <= 0 {
-		return "", errors.New("TenantID must be > 0")
-	}
 	if c.Role == "" {
 		return "", errors.New("Role must not be empty")
+	}
+	if c.Role != "super_admin" && c.TenantID <= 0 {
+		return "", errors.New("TenantID must be > 0 for non-super_admin")
 	}
 	now := time.Now()
 	jti := uuid.NewString()
