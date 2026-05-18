@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { RouterProvider } from "@tanstack/react-router";
 import { queryClient } from "@/lib/qc";
 import { useAuth } from "@/lib/auth";
 import { Login } from "@/pages/login";
-import { Shell } from "@/components/layout/shell";
-import { Dashboard } from "@/pages/dashboard";
+import { router } from "@/router";
 
 export function App() {
   const token = useAuth((s) => s.token);
@@ -17,13 +17,7 @@ export function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {token ? (
-        <Shell>
-          <Dashboard />
-        </Shell>
-      ) : (
-        <Login />
-      )}
+      {token ? <RouterProvider router={router} /> : <Login />}
     </QueryClientProvider>
   );
 }
