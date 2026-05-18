@@ -1,0 +1,57 @@
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  prometheus:
+    ports:
+      - "9090:9090"
+
+  grafana:
+    ports:
+      - "3000:3000"
+
+  loki:
+    ports:
+      - "3100:3100"
+
+  engine-api:
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./engine:/src:cached
+
+  engine-cdr-ingest:
+    ports:
+      - "8081:8081"
+
+  console:
+    image: node:20-alpine
+    build: !reset null
+    working_dir: /src
+    command: ["sh", "-c", "npm install --no-audit --no-fund && npm run dev"]
+    volumes:
+      - ./apps/console:/src
+      - /src/node_modules
+    ports:
+      - "3001:3001"
+
+  agent:
+    image: node:20-alpine
+    build: !reset null
+    working_dir: /src
+    command: ["sh", "-c", "npm install --no-audit --no-fund && npm run dev"]
+    volumes:
+      - ./apps/agent:/src
+      - /src/node_modules
+    ports:
+      - "3002:3002"

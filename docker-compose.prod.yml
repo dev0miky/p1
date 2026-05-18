@@ -1,0 +1,71 @@
+services:
+  postgres:
+    deploy:
+      resources:
+        limits: { cpus: "4", memory: 8G }
+        reservations: { cpus: "2", memory: 4G }
+
+  redis:
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 1G }
+
+  minio:
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 2G }
+
+  kamailio:
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 1G }
+
+  freeswitch:
+    deploy:
+      resources:
+        limits: { cpus: "8", memory: 4G }
+
+  engine-api:
+    deploy:
+      replicas: 2
+      resources:
+        limits: { cpus: "2", memory: 1G }
+
+  engine-dialer:
+    deploy:
+      replicas: 1
+      resources:
+        limits: { cpus: "2", memory: 1G }
+
+  engine-cdr-ingest:
+    deploy:
+      replicas: 2
+      resources:
+        limits: { cpus: "1", memory: 512M }
+
+  console:
+    deploy:
+      replicas: 2
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+
+  agent:
+    deploy:
+      replicas: 2
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+
+  grafana:
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 512M }
+
+  prometheus:
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 1G }
+
+  loki:
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 1G }
