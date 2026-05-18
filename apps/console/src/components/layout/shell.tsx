@@ -10,7 +10,6 @@ interface NavItem {
 }
 
 const tenantNav: NavItem[] = [
-  { label: "Overview", href: "/" },
   { label: "Campaigns", href: "/campaigns" },
   { label: "Leads", href: "/leads" },
   { label: "Agents", href: "/agents" },
@@ -26,6 +25,11 @@ const adminNav: NavItem[] = [
   { label: "Carriers", href: "/admin/carriers" },
   { label: "DIDs", href: "/admin/dids" },
   { label: "Traceback", href: "/admin/traceback", badge: 0 },
+];
+
+const tenantNavWithOverview: NavItem[] = [
+  { label: "Overview", href: "/" },
+  ...tenantNav,
 ];
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -46,8 +50,12 @@ export function Shell({ children }: { children: ReactNode }) {
           <Brand size="sm" />
         </div>
 
-        <nav className="flex-1 py-6 overflow-y-auto">
-          <NavSection title={isAdmin ? "Platform" : "Tenant"} items={isAdmin ? adminNav : tenantNav} />
+        <nav className="flex-1 py-6 overflow-y-auto space-y-8">
+          {isAdmin && <NavSection title="Platform" items={adminNav} />}
+          <NavSection
+            title={isAdmin ? "Cross-tenant" : "Tenant"}
+            items={isAdmin ? tenantNav : tenantNavWithOverview}
+          />
         </nav>
 
         <div className="border-t border-ink-400 p-4 space-y-3">
