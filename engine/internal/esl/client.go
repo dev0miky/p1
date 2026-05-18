@@ -98,7 +98,11 @@ func (c *Client) dispatch(evt *eslgo.Event) {
 	if vals, ok := evt.Headers["Event-Name"]; ok && len(vals) > 0 {
 		name = vals[0]
 	}
-	c.logger.Debug("esl event", "name", name, "handler_nil", h == nil)
+	if name == "BACKGROUND_JOB" {
+		c.logger.Debug("esl bgjob", "body", string(evt.Body), "job_uuid", evt.GetHeader("Job-UUID"))
+	} else {
+		c.logger.Debug("esl event", "name", name, "handler_nil", h == nil)
+	}
 	if h == nil {
 		return
 	}
