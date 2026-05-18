@@ -58,20 +58,8 @@ export function Dashboard() {
         </section>
       )}
 
-      <section className="mt-14">
-        <SectionTitle
-          index="02"
-          title={isAdmin ? "Platform" : "Today"}
-          subtitle={isAdmin ? "What's wired right now" : "Calls placed across all campaigns"}
-        />
-        <div className="surface mt-6 p-12 text-center">
-          <p className="font-mono text-2xs uppercase tracking-widest text-ink-700">no dialer activity yet</p>
-          <p className="mt-4 text-sm text-ink-800 max-w-md mx-auto">
-            Once a campaign goes active and a carrier trunk is attached, this is where the live
-            wallboard lives — answered, abandoned, voicemail-dropped, transferred, opt-out, by-the-second.
-          </p>
-        </div>
-      </section>
+      <DialerActivity />
+
 
       <section className="mt-16 grid grid-cols-1 lg:grid-cols-3 gap-px bg-ink-400 border border-ink-400">
         <Panel title="Compliance" status="ok">
@@ -94,6 +82,100 @@ export function Dashboard() {
       </section>
     </div>
   );
+}
+
+interface CallRow {
+  uuid: string;
+  state: string;
+  dialed_number: string;
+  hangup_cause?: string | null;
+  started_at: string;
+  ended_at?: string | null;
+  campaign_id?: number | null;
+}
+
+interface CallsResp {
+  calls: CallRow[];
+}
+
+interface StatsResp {
+  window_minutes: number;
+  total: number;
+  by_state: Record<string, number>;
+}
+
+function DialerActivity() {
+  const recent = useApiQuery<CallsResp>(["calls.recent"], "/tenant/calls/recent?limit=10");
+  const stats = useApiQuery<StatsResp>(["calls.stats"], "/tenant/calls/stats?minutes=60");
+
+  const calls = recent.data?.calls ?? [];
+  const byState = stats.data?.by_state ?? {};
+  const total60 = stats.data?.total ?? 0;
+
+  return (
+    <section className="mt-14">
+      <SectionTitle index="02" title="Dialer activity" subtitle="Last 60 minutes" />
+
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-px bg-ink-400 border border-ink-400 mt-6">
+        <ActivityCell label="Total" value={total60} accent="phosphor" />
+        <ActivityCell label="Originating" value={byState["originating"] ?? 0} />
+        <ActivityCell label="Answered" value={byState["answered"] ?? 0} accent="phosphor" />
+        <ActivityCell label="Completed" value={byState["completed"] ?? 0} />
+        <ActivityCell label="No answer" value={byState["no_answer"] ?? 0} />
+        <ActivityCell label="Failed" value={byState["failed"] ?? 0} accent="danger" />
+      </div>
+
+      <div className="surface mt-6 overflow-hidden">
+        <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_2fr] gap-px bg-ink-400 border-b border-ink-400">
+          {["Number", "Campaign", "State", "Started", "UUID"].map((h) => (
+            <div key={h} className="bg-ink-100 px-5 py-3 font-mono text-2xs uppercase tracking-widest text-ink-700">{h}</div>
+          ))}
+        </div>
+        {calls.length === 0 ? (
+          <div className="bg-ink-50 px-5 py-8 text-center">
+            <p className="font-mono text-2xs uppercase tracking-widest text-ink-700">no calls placed yet</p>
+            <p className="mt-2 text-sm text-ink-800">Activate a campaign with at least one lead and dialer ticks will populate this.</p>
+          </div>
+        ) : (
+          calls.map((c, i) => (
+            <div key={c.uuid} className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_2fr] gap-px bg-ink-400 border-b border-ink-400 last:border-b-0">
+              <div className={`px-5 py-3 ${i % 2 === 0 ? "bg-ink-100" : "bg-ink-50"} data-cell text-ink-950`}>{c.dialed_number}</div>
+              <div className={`px-5 py-3 ${i % 2 === 0 ? "bg-ink-100" : "bg-ink-50"} font-mono text-xs text-ink-900`}>{c.campaign_id ? `#${c.campaign_id}` : <span className="text-ink-700">—</span>}</div>
+              <div className={`px-5 py-3 ${i % 2 === 0 ? "bg-ink-100" : "bg-ink-50"} font-mono text-2xs uppercase tracking-widest text-ink-900`}>
+                <CallStateLabel state={c.state} />
+              </div>
+              <div className={`px-5 py-3 ${i % 2 === 0 ? "bg-ink-100" : "bg-ink-50"} font-mono text-2xs text-ink-700`}>
+                {c.started_at.slice(11, 19)} <span className="text-ink-600">UTC</span>
+              </div>
+              <div className={`px-5 py-3 ${i % 2 === 0 ? "bg-ink-100" : "bg-ink-50"} font-mono text-2xs text-ink-700 truncate`}>{c.uuid}</div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ActivityCell({ label, value, accent }: { label: string; value: number; accent?: "phosphor" | "danger" }) {
+  const cls =
+    accent === "phosphor" ? "text-phosphor"
+    : accent === "danger" ? "text-danger"
+    : "text-ink-950";
+  return (
+    <div className="bg-ink-50 px-4 py-5">
+      <p className="font-mono text-2xs uppercase tracking-widest text-ink-700">{label}</p>
+      <p className={`mt-2 font-display font-light text-3xl tnum ${cls}`}>{value}</p>
+    </div>
+  );
+}
+
+function CallStateLabel({ state }: { state: string }) {
+  const tone =
+    state === "answered" || state === "bridged" ? "text-phosphor"
+    : state === "originating" || state === "ringing" || state === "amd_running" || state === "playing_msg" || state === "wait_dtmf" ? "text-amber"
+    : state === "failed" || state === "no_answer" || state === "busy" ? "text-danger"
+    : "text-ink-900";
+  return <span className={tone}>{state}</span>;
 }
 
 function SectionTitle({ index, title, subtitle }: { index: string; title: string; subtitle: string }) {
