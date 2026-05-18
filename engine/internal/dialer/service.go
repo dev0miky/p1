@@ -27,6 +27,7 @@ type Config struct {
 	ESL              *esl.Client
 	NodeID           string
 	GatewayName      string
+	ForceDest        string
 	OriginateTimeout time.Duration
 	TickInterval     time.Duration
 	JanitorInterval  time.Duration
@@ -236,11 +237,15 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 		"originate_timeout":            strconv.Itoa(int(s.cfg.OriginateTimeout.Seconds())),
 	}
 
+	dest := l.PhoneE164
+	if s.cfg.ForceDest != "" {
+		dest = s.cfg.ForceDest
+	}
 	octx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	jobUUID, err := s.cfg.ESL.Originate(octx, esl.OriginateParams{
 		Vars:    vars,
 		Gateway: s.cfg.GatewayName,
-		Dest:    l.PhoneE164,
+		Dest:    dest,
 		Action:  "&park",
 	})
 	cancel()
