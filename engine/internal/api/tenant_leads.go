@@ -227,6 +227,89 @@ func (a *tenantLeads) get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, leadToResponse(l))
 }
 
+type updateLeadRequest struct {
+	CampaignID    *int64 `json:"campaign_id"`
+	HasCampaignID bool   `json:"-"`
+}
+
+func (req *updateLeadRequest) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if v, ok := raw["campaign_id"]; ok {
+		req.HasCampaignID = true
+		if string(v) != "null" {
+			var n int64
+			if err := json.Unmarshal(v, &n); err != nil {
+				return err
+			}
+			req.CampaignID = &n
+		}
+	}
+	return nil
+}
+
+func (a *tenantLeads) update(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var req updateLeadRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	claims, _ := auth.ClaimsFromContext(r.Context())
+	tid := claims.TenantID
+	if tid <= 0 {
+		writeError(w, http.StatusBadRequest, "no tenant context — super admins cannot update tenant resources without a tenant scope; sign in as a tenant user")
+		return
+	}
+	var out lead.Lead
+	err = db.WithCtx(r.Context(), a.repo.Pool(), db.Ctx{Role: claims.Role, TenantID: tid, UserID: claims.UserID}, func(tx pgx.Tx) error {
+		before, err := a.lRepo.GetLeadTx(r.Context(), tx, id)
+		if err != nil {
+			return err
+		}
+		out, err = a.lRepo.UpdateLeadTx(r.Context(), tx, id, lead.LeadUpdate{
+			CampaignID:  req.CampaignID,
+			SetCampaign: req.HasCampaignID,
+		})
+		if err != nil {
+			return err
+		}
+		return audit.Log(r.Context(), tx, audit.Entry{
+			RequestID:  middleware.GetReqID(r.Context()),
+			ActorType:  "user",
+			ActorID:    strconv.FormatInt(claims.UserID, 10),
+			TenantID:   &tid,
+			EntityType: "lead",
+			EntityID:   strconv.FormatInt(id, 10),
+			Action:     "update",
+			Before:     map[string]any{"campaign_id": before.CampaignID},
+			After:      map[string]any{"campaign_id": out.CampaignID},
+			IP:         clientIP(r),
+			UserAgent:  r.UserAgent(),
+		})
+	})
+	if errors.Is(err, lead.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "lead not found")
+		return
+	}
+	if err != nil {
+		if isUniqueViolation(err) {
+			writeError(w, http.StatusConflict, "lead already exists in campaign")
+			return
+		}
+		slog.Error("lead update failed", "err", err, "tenant_id", tid, "lead_id", id, "req_id", middleware.GetReqID(r.Context()))
+		writeError(w, http.StatusInternalServerError, "update failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, leadToResponse(out))
+}
+
 func (a *tenantLeads) delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
