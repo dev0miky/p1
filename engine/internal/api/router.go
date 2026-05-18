@@ -11,6 +11,7 @@ import (
 
 	"p1/engine/internal/auth"
 	"p1/engine/internal/campaign"
+	"p1/engine/internal/lead"
 	"p1/engine/internal/tenant"
 )
 
@@ -94,6 +95,18 @@ func NewRouter(cfg Config) http.Handler {
 		r.Get("/", tenC.list)
 		r.Get("/{id}", tenC.get)
 		r.Patch("/{id}", tenC.update)
+	})
+
+	lRepo := lead.NewRepo()
+	tenL := &tenantLeads{repo: cfg.Repo, lRepo: lRepo}
+	r.Route("/tenant/leads", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireTenant)
+		r.Use(auth.RequireAction(auth.ActionManageLeads))
+		r.Post("/", tenL.create)
+		r.Get("/", tenL.list)
+		r.Get("/{id}", tenL.get)
+		r.Delete("/{id}", tenL.delete)
 	})
 
 	return r
