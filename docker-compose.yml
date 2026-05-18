@@ -263,6 +263,7 @@ services:
       FREESWITCH_ESL_PASSWORD: ${FREESWITCH_ESL_PASSWORD}
       DIALER_GATEWAY: ${DIALER_GATEWAY:-loopback}
       DIALER_FORCE_DEST: ${DIALER_FORCE_DEST:-}
+      DIALER_TEST_PLAYBACK: ${DIALER_TEST_PLAYBACK:-}
       LOG_LEVEL: ${LOG_LEVEL}
     extra_hosts:
       - "host.docker.internal:host-gateway"
