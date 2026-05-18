@@ -2,6 +2,9 @@ import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/re
 import { Shell } from "@/components/layout/shell";
 import { Dashboard } from "@/pages/dashboard";
 import { CampaignsPage } from "@/pages/campaigns";
+import { LeadsPage } from "@/pages/leads";
+import { DNCPage } from "@/pages/dnc";
+import { AdminTenantsPage } from "@/pages/admin-tenants";
 import { Placeholder } from "@/pages/placeholder";
 
 const rootRoute = createRootRoute({
@@ -27,13 +30,13 @@ const campaignsRoute = createRoute({
 const leadsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/leads",
-  component: () => <Placeholder section="§ leads" title="Leads" body="CSV upload + filtered table + DNC suppression preview lands here next." />,
+  component: LeadsPage,
 });
 
 const dncRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/dnc",
-  component: () => <Placeholder section="§ dnc" title="DNC" body="Internal DNC list, opt-out evidence, federal/state scrubbing status." />,
+  component: DNCPage,
 });
 
 const reportsRoute = createRoute({
@@ -57,7 +60,7 @@ const usersRoute = createRoute({
 const adminTenantsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/admin/tenants",
-  component: () => <Placeholder section="§ platform" title="Tenants" body="Create, suspend, assign carriers & DID pools." />,
+  component: AdminTenantsPage,
 });
 
 const adminCarriersRoute = createRoute({
