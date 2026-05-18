@@ -94,8 +94,12 @@ func (a *tenantLeads) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.PhoneE164 == "" {
-		writeError(w, http.StatusBadRequest, "phone_e164 required")
-		return
+		if req.DialDestination != nil && *req.DialDestination != "" {
+			req.PhoneE164 = "+10000000000"
+		} else {
+			writeError(w, http.StatusBadRequest, "phone_e164 required")
+			return
+		}
 	}
 	if !lead.ValidE164(req.PhoneE164) {
 		writeError(w, http.StatusBadRequest, "phone_e164 must be E.164 format (+1XXXXXXXXXX)")
