@@ -162,6 +162,56 @@ func (r *Repo) TransitionTx(ctx context.Context, tx pgx.Tx, in TransitionInput) 
 	return updated, nil
 }
 
+func (r *Repo) ListRecentTx(ctx context.Context, tx pgx.Tx, limit int) ([]Call, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT `+callFields+` FROM call_state
+		ORDER BY started_at DESC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Call
+	for rows.Next() {
+		var c Call
+		if err := scanCall(rows, &c); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+type StateCount struct {
+	State State
+	Count int
+}
+
+func (r *Repo) CountByStateTx(ctx context.Context, tx pgx.Tx, sinceMinutes int) ([]StateCount, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT state, COUNT(*) FROM call_state
+		WHERE started_at > now() - ($1 || ' minutes')::interval
+		GROUP BY state
+	`, fmt.Sprintf("%d", sinceMinutes))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StateCount
+	for rows.Next() {
+		var sc StateCount
+		if err := rows.Scan(&sc.State, &sc.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, sc)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repo) ListActiveTx(ctx context.Context, tx pgx.Tx, limit int) ([]Call, error) {
 	if limit <= 0 || limit > 10000 {
 		limit = 1000

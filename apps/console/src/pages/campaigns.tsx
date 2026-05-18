@@ -79,12 +79,31 @@ function Table({ data, onChanged }: { data: Campaign[]; onChanged: () => void })
 }
 
 function Row({ c, odd, onChanged }: { c: Campaign; odd: boolean; onChanged: () => void }) {
+  const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   const toggle = useApiMutation<Campaign, { status: string }>(`/tenant/campaigns/${c.id}`, "PATCH", {
     invalidate: ["campaigns"],
-    onSuccess: () => onChanged(),
+    onSuccess: () => {
+      setOptimisticStatus(null);
+      setError(null);
+      onChanged();
+    },
+    onError: (e) => {
+      setOptimisticStatus(null);
+      setError(e instanceof ApiError ? e.message : "toggle failed");
+    },
   });
-  const isLive = c.status === "active";
+
+  const effectiveStatus = optimisticStatus ?? c.status;
+  const isLive = effectiveStatus === "active";
   const next = isLive ? "paused" : "active";
+
+  function onClick() {
+    setOptimisticStatus(next);
+    setError(null);
+    toggle.mutate({ status: next });
+  }
 
   return (
     <motion.div
@@ -96,10 +115,14 @@ function Row({ c, odd, onChanged }: { c: Campaign; odd: boolean; onChanged: () =
       }`}
     >
       <div className={`px-5 py-4 ${odd ? "bg-ink-50" : "bg-ink-100"} flex items-center gap-3`}>
-        <StatusDot kind={c.status === "active" ? "live" : c.status === "paused" ? "paused" : c.status === "completed" ? "completed" : "archived"} />
+        <StatusDot kind={effectiveStatus === "active" ? "live" : effectiveStatus === "paused" ? "paused" : effectiveStatus === "completed" ? "completed" : "archived"} />
         <div>
           <p className="text-ink-950 text-sm">{c.name}</p>
-          <p className="font-mono text-2xs text-ink-700 mt-0.5">#{c.id} · {c.status}</p>
+          <p className="font-mono text-2xs text-ink-700 mt-0.5">
+            #{c.id} · {effectiveStatus}
+            {optimisticStatus && <span className="text-amber"> · saving</span>}
+            {error && <span className="text-danger"> · {error}</span>}
+          </p>
         </div>
       </div>
       <div className={`px-5 py-4 ${odd ? "bg-ink-50" : "bg-ink-100"} font-mono text-sm text-ink-900 uppercase`}>{c.mode}</div>
@@ -109,7 +132,7 @@ function Row({ c, odd, onChanged }: { c: Campaign; odd: boolean; onChanged: () =
       <div className={`${odd ? "bg-ink-50" : "bg-ink-100"} flex items-center justify-end pr-4`}>
         <Button
           variant={isLive ? "danger" : "primary"}
-          onClick={() => toggle.mutate({ status: next })}
+          onClick={onClick}
           disabled={toggle.isPending}
           className="h-7 px-3"
         >
