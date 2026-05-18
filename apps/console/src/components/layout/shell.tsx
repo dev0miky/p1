@@ -22,6 +22,7 @@ const tenantNav: NavItem[] = [
 const adminNav: NavItem[] = [
   { label: "Overview", href: "/" },
   { label: "Tenants", href: "/admin/tenants" },
+  { label: "Users", href: "/admin/users" },
   { label: "Carriers", href: "/admin/carriers" },
   { label: "DIDs", href: "/admin/dids" },
   { label: "Traceback", href: "/admin/traceback", badge: 0 },

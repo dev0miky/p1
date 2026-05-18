@@ -5,6 +5,8 @@ import { CampaignsPage } from "@/pages/campaigns";
 import { LeadsPage } from "@/pages/leads";
 import { DNCPage } from "@/pages/dnc";
 import { AdminTenantsPage } from "@/pages/admin-tenants";
+import { AdminUsersPage } from "@/pages/admin-users";
+import { TenantUsersPage } from "@/pages/tenant-users";
 import { Placeholder } from "@/pages/placeholder";
 
 const rootRoute = createRootRoute({
@@ -54,7 +56,13 @@ const agentsRoute = createRoute({
 const usersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/users",
-  component: () => <Placeholder section="§ users" title="Users" body="Tenant users + invitations." />,
+  component: TenantUsersPage,
+});
+
+const adminUsersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/users",
+  component: AdminUsersPage,
 });
 
 const adminTenantsRoute = createRoute({
@@ -90,6 +98,7 @@ const routeTree = rootRoute.addChildren([
   agentsRoute,
   usersRoute,
   adminTenantsRoute,
+  adminUsersRoute,
   adminCarriersRoute,
   adminDidsRoute,
   adminTracebackRoute,
