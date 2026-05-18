@@ -58,7 +58,7 @@ func main() {
 func serve(cfg config.Config, logger *slog.Logger) error {
 	ctx := context.Background()
 
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	pool, err := pgxpool.New(ctx, cfg.AppDatabaseURL)
 	if err != nil {
 		return fmt.Errorf("db pool: %w", err)
 	}
@@ -106,7 +106,7 @@ func runSeed(cfg config.Config, logger *slog.Logger) error {
 		return errors.New("SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD must be set")
 	}
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	pool, err := pgxpool.New(ctx, cfg.AppDatabaseURL)
 	if err != nil {
 		return err
 	}

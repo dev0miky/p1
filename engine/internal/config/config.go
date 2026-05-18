@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -10,6 +11,7 @@ import (
 type Config struct {
 	Port             string
 	DatabaseURL      string
+	AppDatabaseURL   string
 	RedisURL         string
 	JWTSecret        []byte
 	JWTIssuer        string
@@ -41,7 +43,29 @@ func Load() (Config, error) {
 	if c.DatabaseURL == "" {
 		return c, fmt.Errorf("DATABASE_URL is required")
 	}
+
+	appURL := os.Getenv("APP_DATABASE_URL")
+	if appURL == "" {
+		appUser := getEnv("APP_DATABASE_USER", "app_user")
+		appPass := getEnv("APP_DATABASE_PASSWORD", "app_user_change_me")
+		derived, err := rewriteURLUser(c.DatabaseURL, appUser, appPass)
+		if err != nil {
+			return c, fmt.Errorf("derive app database url: %w", err)
+		}
+		appURL = derived
+	}
+	c.AppDatabaseURL = appURL
+
 	return c, nil
+}
+
+func rewriteURLUser(connURL, user, password string) (string, error) {
+	u, err := url.Parse(connURL)
+	if err != nil {
+		return "", err
+	}
+	u.User = url.UserPassword(user, password)
+	return u.String(), nil
 }
 
 func getEnv(k, d string) string {
