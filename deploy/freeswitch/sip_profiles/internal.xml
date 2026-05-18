@@ -1,0 +1,30 @@
+<profile name="internal">
+  <aliases/>
+  <gateways/>
+  <domains>
+    <domain name="all" alias="true" parse="false"/>
+  </domains>
+  <settings>
+    <param name="user-agent-string" value="p1"/>
+    <param name="debug" value="0"/>
+    <param name="sip-trace" value="no"/>
+    <param name="sip-port" value="$${internal_sip_port}"/>
+    <param name="rtp-ip" value="$${local_ip_v4}"/>
+    <param name="sip-ip" value="$${local_ip_v4}"/>
+    <param name="ext-rtp-ip" value="$${external_rtp_ip}"/>
+    <param name="ext-sip-ip" value="$${external_sip_ip}"/>
+    <param name="auth-calls" value="true"/>
+    <param name="apply-inbound-acl" value="domains"/>
+    <param name="dialplan" value="XML"/>
+    <param name="context" value="default"/>
+    <param name="dtmf-duration" value="2000"/>
+    <param name="dtmf-type" value="rfc2833"/>
+    <param name="inbound-codec-prefs" value="$${global_codec_prefs}"/>
+    <param name="outbound-codec-prefs" value="$${global_codec_prefs}"/>
+    <param name="rtp-timer-name" value="soft"/>
+    <param name="enable-100rel" value="true"/>
+    <param name="enable-3pcc" value="proxy"/>
+    <param name="ws-binding" value=":7080"/>
+    <param name="wss-binding" value=":7443"/>
+  </settings>
+</profile>

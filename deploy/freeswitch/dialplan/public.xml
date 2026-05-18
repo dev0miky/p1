@@ -1,0 +1,16 @@
+<include>
+  <context name="public">
+    <extension name="unloop">
+      <condition field="${unroll_loops}" expression="^true$"/>
+      <condition field="${sip_looped_call}" expression="^true$">
+        <action application="deflect" data="${destination_number}"/>
+      </condition>
+    </extension>
+
+    <extension name="public_inbound_did">
+      <condition field="destination_number" expression="^(.*)$">
+        <action application="transfer" data="$1 XML default"/>
+      </condition>
+    </extension>
+  </context>
+</include>
