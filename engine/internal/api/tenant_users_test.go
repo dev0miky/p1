@@ -95,11 +95,11 @@ func TestTenantUserCannotGetCrossTenantUser(t *testing.T) {
 	}
 }
 
-func TestSuperAdminBlockedFromTenantEndpoints(t *testing.T) {
+func TestSuperAdminCanAccessTenantEndpoints(t *testing.T) {
 	s := newStack(t)
 	tok := s.tokenFor(t, 1, 0, "super_admin")
 	w := s.do(t, "GET", "/tenant/users/", tok, nil)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("super_admin should be blocked by RequireTenant: want 403, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("super_admin should pass through RequireTenant: want 200, got %d", w.Code)
 	}
 }

@@ -156,11 +156,11 @@ func TestCampaignAgentRoleForbidden(t *testing.T) {
 	}
 }
 
-func TestCampaignSuperAdminBlockedFromTenantRoute(t *testing.T) {
+func TestCampaignSuperAdminCanAccessTenantRoute(t *testing.T) {
 	s := newStack(t)
 	tok := s.tokenFor(t, 1, 0, "super_admin")
 	w := s.do(t, "GET", "/tenant/campaigns/", tok, nil)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("super_admin should be blocked from /tenant/* by RequireTenant: want 403, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("super_admin should pass RequireTenant for cross-tenant view: want 200, got %d", w.Code)
 	}
 }

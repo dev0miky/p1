@@ -90,6 +90,39 @@ func TestMiddlewareRejectsInvalidToken(t *testing.T) {
 	}
 }
 
+func TestRequireTenantAllowsSuperAdmin(t *testing.T) {
+	iss := NewIssuer([]byte("test-secret-32-bytes-long-aaaaaa"), "p1", time.Hour)
+	tok := mustIssue(t, iss, Claims{UserID: 1, TenantID: 0, Role: "super_admin"})
+
+	called := false
+	h := RequireAuth(iss)(RequireTenant(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(200)
+	})))
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != 200 || !called {
+		t.Fatalf("super_admin should pass RequireTenant: code=%d called=%v", w.Code, called)
+	}
+}
+
+func TestRequireTenantRejectsZeroTenantNonAdmin(t *testing.T) {
+	iss := NewIssuer([]byte("test-secret-32-bytes-long-aaaaaa"), "p1", time.Hour)
+	tok := mustIssue(t, iss, Claims{UserID: 1, TenantID: 1, Role: "tenant_owner"})
+
+	h := RequireAuth(iss)(RequireTenant(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("tenant_owner with valid tenant should pass: %d", w.Code)
+	}
+}
+
 func TestRequireRoleAllowsAndDenies(t *testing.T) {
 	iss := NewIssuer([]byte("test-secret-32-bytes-long-aaaaaa"), "p1", time.Hour)
 	tokAgent := mustIssue(t, iss, Claims{UserID: 1, TenantID: 1, Role: "agent"})

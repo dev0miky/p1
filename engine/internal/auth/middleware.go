@@ -61,6 +61,10 @@ func RequireTenant(next http.Handler) http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		if c.Role == string(RoleSuperAdmin) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if c.TenantID <= 0 {
 			http.Error(w, "tenant context required", http.StatusForbidden)
 			return
