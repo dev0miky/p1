@@ -72,6 +72,23 @@ func (r *Repo) GetTx(ctx context.Context, tx pgx.Tx, id int64) (Campaign, error)
 	return out, err
 }
 
+func (r *Repo) ListActiveTx(ctx context.Context, tx pgx.Tx) ([]Campaign, error) {
+	rows, err := tx.Query(ctx, `SELECT `+fields+` FROM campaigns WHERE status = 'active' ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Campaign
+	for rows.Next() {
+		var c Campaign
+		if err := scanCampaign(rows, &c); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repo) ListTx(ctx context.Context, tx pgx.Tx) ([]Campaign, error) {
 	rows, err := tx.Query(ctx, `SELECT `+fields+` FROM campaigns ORDER BY id`)
 	if err != nil {
