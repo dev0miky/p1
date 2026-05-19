@@ -50,6 +50,15 @@ interface LeadRow {
   last_attempt_at?: string;
   next_eligible_at?: string;
   created_at: string;
+  n_calls: number;
+  n_answered: number;
+  n_ringed: number;
+  n_voicemail: number;
+  n_transferred: number;
+  n_transfer_completed: number;
+  n_error: number;
+  n_went_to_dnc: number;
+  last_call_time?: string;
 }
 
 interface CallRow {
@@ -318,7 +327,7 @@ function LeadsSubTable({
     {
       key: "name",
       header: "Name",
-      width: "1.4fr",
+      width: "1.2fr",
       render: (l) => {
         const n = [l.first_name, l.last_name].filter(Boolean).join(" ");
         return n ? <span className="text-sm text-ink-900">{n}</span> : <span className="text-ink-700">—</span>;
@@ -338,21 +347,31 @@ function LeadsSubTable({
       ),
     },
     {
-      key: "attempts",
-      header: "Attempts",
-      width: "0.7fr",
+      key: "outcomes",
+      header: "Outcomes",
+      width: "1.4fr",
+      render: (l) => <OutcomeBadges lead={l} />,
+    },
+    {
+      key: "calls",
+      header: "Calls",
+      width: "0.6fr",
       align: "right",
       sortable: true,
-      sortValue: (l) => l.attempts,
-      render: (l) => <span className="data-cell text-ink-900">{l.attempts}</span>,
+      sortValue: (l) => l.n_calls,
+      render: (l) => (
+        <span className={clsx("data-cell tnum", l.n_calls > 0 ? "text-ink-950" : "text-ink-700")}>
+          {l.n_calls}
+        </span>
+      ),
     },
     {
       key: "last",
-      header: "Last attempt",
-      width: "1.2fr",
+      header: "Last call",
+      width: "1.1fr",
       render: (l) =>
-        l.last_attempt_at ? (
-          <span className="font-mono text-2xs text-ink-700 tnum">{fmtAt(l.last_attempt_at)}</span>
+        l.last_call_time ? (
+          <span className="font-mono text-2xs text-ink-700 tnum">{fmtAt(l.last_call_time)}</span>
         ) : (
           <span className="text-ink-700">—</span>
         ),
@@ -367,6 +386,30 @@ function LeadsSubTable({
   ];
 
   return <Table<LeadRow> columns={columns} data={leads} rowKey={(l) => l.id} loading={loading} error={error} compact />;
+}
+
+function OutcomeBadges({ lead }: { lead: LeadRow }) {
+  const pills: Array<{ label: string; value: number; color: string }> = [
+    { label: "ans", value: lead.n_answered, color: "text-phosphor" },
+    { label: "rng", value: lead.n_ringed, color: "text-ink-900" },
+    { label: "vm", value: lead.n_voicemail, color: "text-amber" },
+    { label: "xfr", value: lead.n_transferred, color: "text-info" },
+    { label: "err", value: lead.n_error, color: "text-danger" },
+  ];
+  const shown = pills.filter((p) => p.value > 0);
+  if (shown.length === 0) {
+    return <span className="font-mono text-2xs uppercase tracking-widest text-ink-700">—</span>;
+  }
+  return (
+    <span className="flex items-center gap-1.5 font-mono text-2xs uppercase tracking-widest">
+      {shown.map((p) => (
+        <span key={p.label} className="inline-flex items-baseline gap-1">
+          <span className="text-ink-700">{p.label}</span>
+          <span className={clsx("tnum", p.color)}>{p.value}</span>
+        </span>
+      ))}
+    </span>
+  );
 }
 
 function RedialBtn({ lead, onChanged }: { lead: LeadRow; onChanged: () => void }) {

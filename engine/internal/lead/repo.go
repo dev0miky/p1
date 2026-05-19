@@ -18,13 +18,17 @@ func NewRepo() *Repo { return &Repo{} }
 
 const leadFields = `id, tenant_id, list_id, campaign_id, phone_e164, dial_destination,
   first_name, last_name, email, timezone, state_code, status, attempts,
-  last_attempt_at, next_eligible_at, custom_fields, created_at, updated_at`
+  last_attempt_at, next_eligible_at, custom_fields, created_at, updated_at,
+  n_calls, n_answered, n_ringed, n_voicemail, n_transferred, n_transfer_completed,
+  n_error, n_went_to_dnc, first_call_time, last_call_time`
 
 func scanLead(row pgx.Row, l *Lead) error {
 	return row.Scan(
 		&l.ID, &l.TenantID, &l.ListID, &l.CampaignID, &l.PhoneE164, &l.DialDestination,
 		&l.FirstName, &l.LastName, &l.Email, &l.Timezone, &l.StateCode, &l.Status, &l.Attempts,
 		&l.LastAttemptAt, &l.NextEligibleAt, &l.CustomFields, &l.CreatedAt, &l.UpdatedAt,
+		&l.NCalls, &l.NAnswered, &l.NRinged, &l.NVoicemail, &l.NTransferred, &l.NTransferCompleted,
+		&l.NError, &l.NWentToDNC, &l.FirstCallTime, &l.LastCallTime,
 	)
 }
 
@@ -153,6 +157,67 @@ func (r *Repo) RedialLeadTx(ctx context.Context, tx pgx.Tx, id int64) (Lead, err
 		return out, ErrNotFound
 	}
 	return out, err
+}
+
+type CounterDelta struct {
+	NCalls             int
+	NAnswered          int
+	NRinged            int
+	NVoicemail         int
+	NTransferred       int
+	NTransferCompleted int
+	NError             int
+	NWentToDNC         int
+	SetCallTimes       bool // when true, sets last_call_time = now() and first_call_time = COALESCE(first_call_time, now())
+}
+
+func (d CounterDelta) IsZero() bool {
+	return d.NCalls == 0 &&
+		d.NAnswered == 0 &&
+		d.NRinged == 0 &&
+		d.NVoicemail == 0 &&
+		d.NTransferred == 0 &&
+		d.NTransferCompleted == 0 &&
+		d.NError == 0 &&
+		d.NWentToDNC == 0 &&
+		!d.SetCallTimes
+}
+
+func (r *Repo) IncrementCountersTx(ctx context.Context, tx pgx.Tx, id int64, d CounterDelta) error {
+	if d.IsZero() {
+		return nil
+	}
+	sets := []string{}
+	type bump struct {
+		col   string
+		delta int
+	}
+	for _, b := range []bump{
+		{"n_calls", d.NCalls},
+		{"n_answered", d.NAnswered},
+		{"n_ringed", d.NRinged},
+		{"n_voicemail", d.NVoicemail},
+		{"n_transferred", d.NTransferred},
+		{"n_transfer_completed", d.NTransferCompleted},
+		{"n_error", d.NError},
+		{"n_went_to_dnc", d.NWentToDNC},
+	} {
+		if b.delta != 0 {
+			sets = append(sets, fmt.Sprintf("%s = %s + %d", b.col, b.col, b.delta))
+		}
+	}
+	if d.SetCallTimes {
+		sets = append(sets, "last_call_time = now()")
+		sets = append(sets, "first_call_time = COALESCE(first_call_time, now())")
+	}
+	tag, err := tx.Exec(ctx, "UPDATE leads SET "+strings.Join(sets, ", ")+" WHERE id = $1", id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repo) DeleteLeadTx(ctx context.Context, tx pgx.Tx, id int64) error {

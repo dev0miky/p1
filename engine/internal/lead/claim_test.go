@@ -180,3 +180,65 @@ func TestReleaseExpiredLocks(t *testing.T) {
 		t.Fatalf("expected to release 1 lead, got %d", n)
 	}
 }
+
+func TestIncrementCountersBumpsAndSetsCallTimes(t *testing.T) {
+	pool, tid, campID := setupLeads(t)
+	id := seedLead(t, pool, tid, campID, "+15558881111")
+	repo := lead.NewRepo()
+	ctx := context.Background()
+
+	if err := db.WithCtx(ctx, pool, db.Ctx{Role: "tenant_owner", TenantID: tid}, func(tx pgx.Tx) error {
+		return repo.IncrementCountersTx(ctx, tx, id, lead.CounterDelta{NCalls: 1, SetCallTimes: true})
+	}); err != nil {
+		t.Fatalf("inc1: %v", err)
+	}
+	if err := db.WithCtx(ctx, pool, db.Ctx{Role: "tenant_owner", TenantID: tid}, func(tx pgx.Tx) error {
+		return repo.IncrementCountersTx(ctx, tx, id, lead.CounterDelta{NRinged: 1})
+	}); err != nil {
+		t.Fatalf("inc2: %v", err)
+	}
+	if err := db.WithCtx(ctx, pool, db.Ctx{Role: "tenant_owner", TenantID: tid}, func(tx pgx.Tx) error {
+		return repo.IncrementCountersTx(ctx, tx, id, lead.CounterDelta{NAnswered: 1, NTransferred: 1, NTransferCompleted: 1})
+	}); err != nil {
+		t.Fatalf("inc3: %v", err)
+	}
+
+	var l lead.Lead
+	if err := db.WithCtx(ctx, pool, db.Ctx{Role: "tenant_owner", TenantID: tid}, func(tx pgx.Tx) error {
+		var err error
+		l, err = repo.GetLeadTx(ctx, tx, id)
+		return err
+	}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if l.NCalls != 1 || l.NRinged != 1 || l.NAnswered != 1 || l.NTransferred != 1 || l.NTransferCompleted != 1 {
+		t.Fatalf("counters wrong: %+v", l)
+	}
+	if l.FirstCallTime == nil || l.LastCallTime == nil {
+		t.Fatalf("call times not set: first=%v last=%v", l.FirstCallTime, l.LastCallTime)
+	}
+
+	firstCall := *l.FirstCallTime
+	time.Sleep(10 * time.Millisecond)
+	if err := db.WithCtx(ctx, pool, db.Ctx{Role: "tenant_owner", TenantID: tid}, func(tx pgx.Tx) error {
+		return repo.IncrementCountersTx(ctx, tx, id, lead.CounterDelta{NCalls: 1, SetCallTimes: true})
+	}); err != nil {
+		t.Fatalf("inc4: %v", err)
+	}
+	if err := db.WithCtx(ctx, pool, db.Ctx{Role: "tenant_owner", TenantID: tid}, func(tx pgx.Tx) error {
+		var err error
+		l, err = repo.GetLeadTx(ctx, tx, id)
+		return err
+	}); err != nil {
+		t.Fatalf("get2: %v", err)
+	}
+	if l.NCalls != 2 {
+		t.Fatalf("n_calls should be 2 after second inc, got %d", l.NCalls)
+	}
+	if !l.FirstCallTime.Equal(firstCall) {
+		t.Fatalf("first_call_time changed: was %v now %v", firstCall, l.FirstCallTime)
+	}
+	if !l.LastCallTime.After(firstCall) {
+		t.Fatalf("last_call_time not advanced: %v vs %v", l.LastCallTime, firstCall)
+	}
+}

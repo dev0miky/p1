@@ -5,6 +5,7 @@ import (
 
 	"p1/engine/internal/esl"
 	"p1/engine/internal/fsm"
+	"p1/engine/internal/lead"
 )
 
 func TestEventToTransitionAnswer(t *testing.T) {
@@ -82,5 +83,31 @@ func TestUnknownEventIgnored(t *testing.T) {
 	})
 	if _, ok := EventToTransition(e); ok {
 		t.Error("HEARTBEAT should be ignored")
+	}
+}
+
+func TestCounterDeltaForCoversAllOutcomes(t *testing.T) {
+	cases := []struct {
+		state fsm.State
+		want  lead.CounterDelta
+	}{
+		{fsm.StateOriginating, lead.CounterDelta{NCalls: 1, SetCallTimes: true}},
+		{fsm.StateRinging, lead.CounterDelta{NRinged: 1}},
+		{fsm.StateAnswered, lead.CounterDelta{NAnswered: 1}},
+		{fsm.StateBridging, lead.CounterDelta{NTransferred: 1}},
+		{fsm.StateBridged, lead.CounterDelta{NTransferCompleted: 1}},
+		{fsm.StateFailed, lead.CounterDelta{NError: 1}},
+		{fsm.StateVoicemail, lead.CounterDelta{NVoicemail: 1}},
+		{fsm.StateOptOut, lead.CounterDelta{NWentToDNC: 1}},
+		{fsm.StateCompleted, lead.CounterDelta{}},
+		{fsm.StateBusy, lead.CounterDelta{}},
+		{fsm.StateNoAnswer, lead.CounterDelta{}},
+		{fsm.StateQueued, lead.CounterDelta{}},
+	}
+	for _, c := range cases {
+		got := counterDeltaFor(c.state)
+		if got != c.want {
+			t.Errorf("state %s: want %+v, got %+v", c.state, c.want, got)
+		}
 	}
 }

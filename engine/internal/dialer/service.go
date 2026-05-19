@@ -322,9 +322,41 @@ func (s *Service) advanceState(ctx context.Context, tenantID int64, uuid string,
 				in.HangupCause = &hc
 			}
 		}
-		_, err = s.fsm.TransitionTx(ctx, tx, in)
-		return err
+		if _, err := s.fsm.TransitionTx(ctx, tx, in); err != nil {
+			return err
+		}
+		if current.LeadID != nil {
+			delta := counterDeltaFor(to)
+			if !delta.IsZero() {
+				if err := s.lead.IncrementCountersTx(ctx, tx, *current.LeadID, delta); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	})
+}
+
+func counterDeltaFor(to fsm.State) lead.CounterDelta {
+	switch to {
+	case fsm.StateOriginating:
+		return lead.CounterDelta{NCalls: 1, SetCallTimes: true}
+	case fsm.StateRinging:
+		return lead.CounterDelta{NRinged: 1}
+	case fsm.StateAnswered:
+		return lead.CounterDelta{NAnswered: 1}
+	case fsm.StateBridging:
+		return lead.CounterDelta{NTransferred: 1}
+	case fsm.StateBridged:
+		return lead.CounterDelta{NTransferCompleted: 1}
+	case fsm.StateFailed:
+		return lead.CounterDelta{NError: 1}
+	case fsm.StateVoicemail:
+		return lead.CounterDelta{NVoicemail: 1}
+	case fsm.StateOptOut:
+		return lead.CounterDelta{NWentToDNC: 1}
+	}
+	return lead.CounterDelta{}
 }
 
 func (s *Service) failCall(ctx context.Context, tenantID int64, uuid, reason string) {

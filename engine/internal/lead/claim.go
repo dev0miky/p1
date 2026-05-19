@@ -48,7 +48,9 @@ func (r *Repo) ClaimBatchTx(ctx context.Context, tx pgx.Tx, opts ClaimOptions) (
 		RETURNING l.id, l.tenant_id, l.list_id, l.campaign_id, l.phone_e164, l.dial_destination,
 		  l.first_name, l.last_name, l.email, l.timezone, l.state_code, l.status, l.attempts,
 		  l.last_attempt_at, l.next_eligible_at,
-		  l.custom_fields, l.created_at, l.updated_at`,
+		  l.custom_fields, l.created_at, l.updated_at,
+		  l.n_calls, l.n_answered, l.n_ringed, l.n_voicemail, l.n_transferred, l.n_transfer_completed,
+		  l.n_error, l.n_went_to_dnc, l.first_call_time, l.last_call_time`,
 		opts.CampaignID, opts.Limit, opts.NodeID, fmt.Sprintf("%d", int(opts.LockFor.Seconds())))
 	if err != nil {
 		return nil, err
