@@ -96,6 +96,18 @@ func TestBgAPIReturnsJobUUID(t *testing.T) {
 	}
 }
 
+func TestBuildOriginateCmdStartsWithOriginateKeyword(t *testing.T) {
+	cmd := esl.BuildOriginateCmd(esl.OriginateParams{
+		Vars:    esl.OriginateVars{"origination_uuid": "abc"},
+		Gateway: "linphone",
+		Dest:    "mikephone",
+	}, "&park")
+	const prefix = "originate "
+	if len(cmd) < len(prefix) || cmd[:len(prefix)] != prefix {
+		t.Fatalf("want command starting with %q, got %q", prefix, cmd)
+	}
+}
+
 func TestOriginateRejectsEmptyGateway(t *testing.T) {
 	c := testClient(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
