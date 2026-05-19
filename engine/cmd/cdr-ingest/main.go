@@ -2,14 +2,19 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger.Warn("placeholder — not wired yet", "service", "cdr-ingest")
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/cdr", func(w http.ResponseWriter, r *http.Request) {
+		logger.Warn("placeholder — not wired yet", "service", "cdr-ingest", "path", "/cdr", "remote", r.RemoteAddr)
 		fmt.Fprintln(w, "ok")
 	})
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -20,8 +25,18 @@ func main() {
 	if port == "" {
 		port = "8081"
 	}
-	log.Printf("cdr-ingest listening on :%s", port)
+
+	go func() {
+		t := time.NewTicker(time.Minute)
+		defer t.Stop()
+		for range t.C {
+			logger.Warn("placeholder — not wired yet", "service", "cdr-ingest")
+		}
+	}()
+
+	logger.Info("cdr-ingest listening", "port", port)
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
-		log.Fatal(err)
+		logger.Error("listen", "err", err)
+		os.Exit(1)
 	}
 }
