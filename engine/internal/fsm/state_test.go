@@ -62,7 +62,6 @@ func TestInvalidTransitionsRejected(t *testing.T) {
 		{StateQueued, StateAnswered},
 		{StateQueued, StateBridged},
 		{StateOriginating, StateBridged},
-		{StateAnswered, StatePress1},
 		{StateRinging, StatePlayingMsg},
 		{StateWaitDTMF, StateBridged},
 	}
@@ -70,6 +69,21 @@ func TestInvalidTransitionsRejected(t *testing.T) {
 		if c.from.CanTransitionTo(c.to) {
 			t.Errorf("transition %s → %s should be rejected", c.from, c.to)
 		}
+	}
+}
+
+func TestPress1ShortcutFromAnswered(t *testing.T) {
+	path := []State{StateAnswered, StatePress1, StateBridging, StateBridged, StateCompleted}
+	for i := 0; i < len(path)-1; i++ {
+		if !path[i].CanTransitionTo(path[i+1]) {
+			t.Errorf("lua-driven press-1: %s → %s must be valid (skip amd/playing/waitdtmf)", path[i], path[i+1])
+		}
+	}
+}
+
+func TestOptOutShortcutFromAnswered(t *testing.T) {
+	if !StateAnswered.CanTransitionTo(StateOptOut) {
+		t.Error("lua-driven opt-out: Answered → OptOut must be valid")
 	}
 }
 

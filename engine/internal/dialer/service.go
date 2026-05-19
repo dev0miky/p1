@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +31,7 @@ type Config struct {
 	GatewayName      string
 	ForceDest        string
 	TestPlayback     string
+	SoundRoot        string
 	OriginateTimeout time.Duration
 	TickInterval     time.Duration
 	JanitorInterval  time.Duration
@@ -43,6 +45,7 @@ type Service struct {
 	lead     *lead.Repo
 	fsm      *fsm.Repo
 	cid      *callerid.Repo
+	dnc      *dnc.Repo
 	pre      *compliance.Preflight
 	logger   *slog.Logger
 
@@ -70,13 +73,18 @@ func New(cfg Config) *Service {
 	if cfg.GatewayName == "" {
 		cfg.GatewayName = "loopback"
 	}
+	if cfg.SoundRoot == "" {
+		cfg.SoundRoot = "/data/sounds"
+	}
+	dncRepo := dnc.NewRepo()
 	return &Service{
 		cfg:      cfg,
 		campaign: campaign.NewRepo(),
 		lead:     lead.NewRepo(),
 		fsm:      fsm.NewRepo(),
 		cid:      callerid.NewRepo(),
-		pre:      compliance.New(dnc.NewRepo()),
+		dnc:      dncRepo,
+		pre:      compliance.New(dncRepo),
 		logger:   cfg.Logger,
 		uuidLead: make(map[string]int64),
 		uuidTen:  make(map[string]int64),
@@ -89,6 +97,7 @@ func (s *Service) Run(ctx context.Context) error {
 	if err := s.cfg.ESL.Subscribe(ctx,
 		"CHANNEL_CREATE",
 		"CHANNEL_ANSWER",
+		"CHANNEL_BRIDGE",
 		"CHANNEL_HANGUP_COMPLETE",
 		"BACKGROUND_JOB",
 		"DTMF",
@@ -234,6 +243,7 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 	s.mu.Unlock()
 
 	callerNumber, callerName := s.pickCallerID(ctx, c.TenantID, c.ID, l.Attempts)
+	transferTo, greetingPath := s.pickPress1(ctx, c.TenantID, c.ID)
 
 	vars := esl.OriginateVars{
 		"origination_uuid":             callUUID,
@@ -255,7 +265,11 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 		dest = s.cfg.ForceDest
 	}
 	action := "&park"
-	if s.cfg.TestPlayback != "" {
+	if transferTo != "" && greetingPath != "" {
+		vars["greeting_sound"] = greetingPath
+		vars["transfer_to"] = transferTo
+		action = "&lua(press1.lua)"
+	} else if s.cfg.TestPlayback != "" {
 		action = "&playback(" + s.cfg.TestPlayback + ")"
 	}
 	octx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -343,8 +357,40 @@ func (s *Service) advanceState(ctx context.Context, tenantID int64, uuid string,
 				}
 			}
 		}
+		if to == fsm.StateOptOut && current.LeadID != nil {
+			if err := s.writeOptOutDNCTx(ctx, tx, tenantID, *current.LeadID); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
+}
+
+func (s *Service) writeOptOutDNCTx(ctx context.Context, tx pgx.Tx, tenantID, leadID int64) error {
+	l, err := s.lead.GetLeadTx(ctx, tx, leadID)
+	if err != nil {
+		return err
+	}
+	tenant := tenantID
+	source := "dtmf_optout"
+	reason := "press 9 in press-1 ivr"
+	_, err = s.dnc.AddInternalTx(ctx, tx, dnc.Entry{
+		TenantID:  &tenant,
+		PhoneE164: l.PhoneE164,
+		Source:    &source,
+		Reason:    &reason,
+	})
+	if err != nil && !isUniqueViolation(err) {
+		return err
+	}
+	return nil
+}
+
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "23505")
 }
 
 func counterDeltaFor(to fsm.State) lead.CounterDelta {
@@ -398,6 +444,43 @@ func (s *Service) pickCallerID(ctx context.Context, tenantID, campaignID int64, 
 		displayName = *pick.DisplayName
 	}
 	return pick.E164Number, displayName
+}
+
+func (s *Service) pickPress1(ctx context.Context, tenantID, campaignID int64) (transferTo, greetingPath string) {
+	var scripts []campaign.AttachedScript
+	var sounds []campaign.AttachedSound
+	err := db.WithCtx(ctx, s.cfg.Pool, db.Ctx{Role: "super_admin", TenantID: tenantID}, func(tx pgx.Tx) error {
+		var e error
+		scripts, e = s.campaign.ListAttachedScriptsTx(ctx, tx, campaignID)
+		if e != nil {
+			return e
+		}
+		sounds, e = s.campaign.ListAttachedSoundsTx(ctx, tx, campaignID)
+		return e
+	})
+	if err != nil {
+		s.logger.Warn("press1 resource lookup failed", "campaign", campaignID, "err", err)
+		return "", ""
+	}
+	for _, sc := range scripts {
+		if sc.Type == "press1" && sc.TransferTo != nil && *sc.TransferTo != "" {
+			transferTo = *sc.TransferTo
+			break
+		}
+	}
+	if transferTo == "" {
+		return "", ""
+	}
+	for _, sn := range sounds {
+		if sn.Role == "greeting" {
+			greetingPath = s.cfg.SoundRoot + "/" + strconv.FormatInt(tenantID, 10) + "/" + sn.FileKey
+			break
+		}
+	}
+	if greetingPath == "" {
+		return "", ""
+	}
+	return transferTo, greetingPath
 }
 
 func (s *Service) failCall(ctx context.Context, tenantID int64, uuid, reason string) {
