@@ -129,7 +129,7 @@ export function LeadsPage() {
       key: "campaign",
       header: "Campaign",
       width: "1.4fr",
-      render: (r) => <CampaignPicker lead={r} campaigns={campaignOptions} />,
+      render: (r) => <CampaignCell lead={r} campaigns={campaignOptions} />,
     },
     {
       key: "status",
@@ -283,33 +283,13 @@ function statusKind(s: string) {
   }
 }
 
-function CampaignPicker({ lead, campaigns }: { lead: Lead; campaigns: Campaign[] }) {
-  const patch = useApiMutation<Lead, { campaign_id: number | null }>(
-    `/tenant/leads/${lead.id}`,
-    "PATCH",
-    {
-      invalidate: ["leads"],
-      onSuccess: () => toast.success("campaign updated"),
-      onError: (e) => toast.error("update failed", { description: e.message }),
-    },
-  );
+function CampaignCell({ lead, campaigns }: { lead: Lead; campaigns: Campaign[] }) {
+  if (lead.campaign_id == null) {
+    return <span className="text-ink-700">—</span>;
+  }
+  const c = campaigns.find((c) => c.id === lead.campaign_id);
   return (
-    <select
-      value={lead.campaign_id ?? ""}
-      disabled={patch.isPending}
-      onClick={(e) => e.stopPropagation()}
-      onChange={(e) =>
-        patch.mutate({ campaign_id: e.target.value === "" ? null : Number(e.target.value) })
-      }
-      className="max-w-full bg-transparent font-mono text-2xs uppercase tracking-widest text-ink-900 border border-transparent px-1 py-0.5 hover:border-ink-500 focus:outline-none focus:border-phosphor disabled:opacity-50 appearance-none cursor-pointer truncate"
-    >
-      <option value="">— none —</option>
-      {campaigns.map((c) => (
-        <option key={c.id} value={c.id}>
-          {c.name}
-        </option>
-      ))}
-    </select>
+    <span className="text-ink-950 text-sm truncate">{c?.name ?? `#${lead.campaign_id}`}</span>
   );
 }
 
