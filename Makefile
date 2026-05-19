@@ -2,7 +2,7 @@ SHELL := /bin/bash
 COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 COMPOSE_PROD := docker compose -f docker-compose.yml -f docker-compose.prod.yml
 
-.PHONY: help up down restart logs ps build pull psql redis-cli fs-cli kam-cli minio-cli migrate seed test lint fmt clean nuke prod-up prod-down
+.PHONY: help up down restart logs ps build pull psql redis-cli fs-cli kam-cli minio-cli migrate seed test lint fmt clean nuke prod-up prod-down sip-trace siptrace
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage: make \033[36m<target>\033[0m\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -77,3 +77,8 @@ prod-up:
 
 prod-down:
 	$(COMPOSE_PROD) down
+
+sip-trace: ## live SIP messages from fs external profile (needs sip-trace=yes)
+	$(COMPOSE) logs -f freeswitch 2>&1 | grep --line-buffered -E "send|recv " | grep --line-buffered -E "SIP/2.0|INVITE|REGISTER|BYE|ACK|CANCEL|OPTIONS|NOTIFY|SUBSCRIBE"
+
+siptrace: sip-trace ## alias for sip-trace
