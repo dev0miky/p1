@@ -99,7 +99,7 @@ export function LeadsPage() {
 function Table({ data, campaigns, onChanged }: { data: Lead[]; campaigns: Campaign[]; onChanged: () => void }) {
   return (
     <div className="mt-6 surface overflow-hidden">
-      <div className="grid grid-cols-[1.6fr_1.6fr_1.6fr_1fr_0.8fr_1.2fr_5rem] gap-px bg-ink-400 border-b border-ink-400">
+      <div className="grid grid-cols-[1.6fr_1.6fr_1.6fr_1fr_0.8fr_1.2fr_8rem] gap-px bg-ink-400 border-b border-ink-400">
         {["Phone", "Name", "Campaign", "Status", "Attempts", "Added", ""].map((h) => (
           <div key={h} className="bg-ink-100 px-5 py-3 font-mono text-2xs uppercase tracking-widest text-ink-700">
             {h}
@@ -141,13 +141,18 @@ function Row({ l, campaigns, odd, onChanged }: { l: Lead; campaigns: Campaign[];
     "PATCH",
     { invalidate: ["leads"], onSuccess: () => onChanged() },
   );
+  const redial = useApiMutation<Lead, void>(
+    `/tenant/leads/${l.id}/redial`,
+    "POST",
+    { invalidate: ["leads"], onSuccess: () => onChanged() },
+  );
   const bg = odd ? "bg-ink-50" : "bg-ink-100";
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18 }}
-      className="grid grid-cols-[1.6fr_1.6fr_1.6fr_1fr_0.8fr_1.2fr_5rem] gap-px bg-ink-400 border-b border-ink-400 last:border-b-0"
+      className="grid grid-cols-[1.6fr_1.6fr_1.6fr_1fr_0.8fr_1.2fr_8rem] gap-px bg-ink-400 border-b border-ink-400 last:border-b-0"
     >
       <div className={`${bg} px-5 py-4 data-cell text-ink-950`}>{l.phone_e164}</div>
       <div className={`${bg} px-5 py-4 text-sm text-ink-900`}>
@@ -172,7 +177,15 @@ function Row({ l, campaigns, odd, onChanged }: { l: Lead; campaigns: Campaign[];
       </div>
       <div className={`${bg} px-5 py-4 data-cell text-ink-900`}>{l.attempts}</div>
       <div className={`${bg} px-5 py-4 font-mono text-2xs text-ink-700`}>{l.created_at.slice(0, 19).replace("T", " ")}</div>
-      <div className={`${bg} flex items-center justify-end pr-4`}>
+      <div className={`${bg} flex items-center justify-end gap-3 pr-4`}>
+        <button
+          onClick={() => redial.mutate()}
+          disabled={redial.isPending}
+          title="reset status to new and zero attempts so the dialer will call again"
+          className="font-mono text-2xs uppercase tracking-widest text-ink-700 hover:text-accent disabled:opacity-50"
+        >
+          {redial.isPending ? "..." : "redial"}
+        </button>
         <button
           onClick={() => {
             if (confirm(`delete lead ${l.phone_e164}?`)) del.mutate();

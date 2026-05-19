@@ -46,6 +46,38 @@ func TestLeadInvalidPhoneRejected(t *testing.T) {
 	}
 }
 
+func TestLeadRedialResetsStatusAndAttempts(t *testing.T) {
+	s := newStack(t)
+	ctx := context.Background()
+	tn, _ := s.repo.CreateTenantAsSuperAdmin(ctx, tenant.Tenant{Slug: "lrd", Name: "x", SIPDomain: "lrd.sip"})
+	tok := s.tokenFor(t, 1, tn.ID, "tenant_owner")
+
+	w := s.do(t, "POST", "/tenant/leads/", tok, map[string]any{"phone_e164": "+15553334444"})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	var L map[string]any
+	json.Unmarshal(w.Body.Bytes(), &L)
+	leadID := int64(L["id"].(float64))
+
+	if _, err := s.repo.Pool().Exec(ctx, `UPDATE leads SET status='done', attempts=3 WHERE id=$1`, leadID); err != nil {
+		t.Fatalf("seed done: %v", err)
+	}
+
+	w = s.do(t, "POST", "/tenant/leads/"+strconv.FormatInt(leadID, 10)+"/redial", tok, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("redial: %d %s", w.Code, w.Body.String())
+	}
+	var got map[string]any
+	json.Unmarshal(w.Body.Bytes(), &got)
+	if got["status"] != "new" {
+		t.Fatalf("status should be new, got %v", got["status"])
+	}
+	if int(got["attempts"].(float64)) != 0 {
+		t.Fatalf("attempts should be 0, got %v", got["attempts"])
+	}
+}
+
 func TestLeadAttachToCampaignViaPatch(t *testing.T) {
 	s := newStack(t)
 	ctx := context.Background()
