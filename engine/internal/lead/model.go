@@ -20,24 +20,34 @@ const (
 )
 
 type Lead struct {
-	ID              int64
-	TenantID        int64
-	ListID          *int64
-	CampaignID      *int64
-	PhoneE164       string
-	DialDestination *string
-	FirstName       *string
-	LastName        *string
-	Email           *string
-	Timezone        *string
-	StateCode       *string
-	Status          Status
-	Attempts        int
-	LastAttemptAt   *time.Time
-	NextEligibleAt  *time.Time
-	CustomFields    json.RawMessage
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID                 int64
+	TenantID           int64
+	ListID             *int64
+	CampaignID         *int64
+	PhoneE164          string
+	DialDestination    *string
+	FirstName          *string
+	LastName           *string
+	Email              *string
+	Timezone           *string
+	StateCode          *string
+	Status             Status
+	Attempts           int
+	LastAttemptAt      *time.Time
+	NextEligibleAt     *time.Time
+	CustomFields       json.RawMessage
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	NCalls             int
+	NAnswered          int
+	NRinged            int
+	NVoicemail         int
+	NTransferred       int
+	NTransferCompleted int
+	NError             int
+	NWentToDNC         int
+	FirstCallTime      *time.Time
+	LastCallTime       *time.Time
 }
 
 type List struct {

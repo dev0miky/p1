@@ -38,44 +38,62 @@ type createLeadRequest struct {
 }
 
 type leadResponse struct {
-	ID              int64           `json:"id"`
-	TenantID        int64           `json:"tenant_id"`
-	ListID          *int64          `json:"list_id,omitempty"`
-	CampaignID      *int64          `json:"campaign_id,omitempty"`
-	PhoneE164       string          `json:"phone_e164"`
-	DialDestination *string         `json:"dial_destination,omitempty"`
-	FirstName       *string         `json:"first_name,omitempty"`
-	LastName        *string         `json:"last_name,omitempty"`
-	Email           *string         `json:"email,omitempty"`
-	Timezone        *string         `json:"timezone,omitempty"`
-	StateCode       *string         `json:"state_code,omitempty"`
-	Status          string          `json:"status"`
-	Attempts        int             `json:"attempts"`
-	LastAttemptAt   *string         `json:"last_attempt_at,omitempty"`
-	NextEligibleAt  *string         `json:"next_eligible_at,omitempty"`
-	CustomFields    json.RawMessage `json:"custom_fields"`
-	CreatedAt       string          `json:"created_at"`
-	UpdatedAt       string          `json:"updated_at"`
+	ID                 int64           `json:"id"`
+	TenantID           int64           `json:"tenant_id"`
+	ListID             *int64          `json:"list_id,omitempty"`
+	CampaignID         *int64          `json:"campaign_id,omitempty"`
+	PhoneE164          string          `json:"phone_e164"`
+	DialDestination    *string         `json:"dial_destination,omitempty"`
+	FirstName          *string         `json:"first_name,omitempty"`
+	LastName           *string         `json:"last_name,omitempty"`
+	Email              *string         `json:"email,omitempty"`
+	Timezone           *string         `json:"timezone,omitempty"`
+	StateCode          *string         `json:"state_code,omitempty"`
+	Status             string          `json:"status"`
+	Attempts           int             `json:"attempts"`
+	LastAttemptAt      *string         `json:"last_attempt_at,omitempty"`
+	NextEligibleAt     *string         `json:"next_eligible_at,omitempty"`
+	CustomFields       json.RawMessage `json:"custom_fields"`
+	CreatedAt          string          `json:"created_at"`
+	UpdatedAt          string          `json:"updated_at"`
+	NCalls             int             `json:"n_calls"`
+	NAnswered          int             `json:"n_answered"`
+	NRinged            int             `json:"n_ringed"`
+	NVoicemail         int             `json:"n_voicemail"`
+	NTransferred       int             `json:"n_transferred"`
+	NTransferCompleted int             `json:"n_transfer_completed"`
+	NError             int             `json:"n_error"`
+	NWentToDNC         int             `json:"n_went_to_dnc"`
+	FirstCallTime      *string         `json:"first_call_time,omitempty"`
+	LastCallTime       *string         `json:"last_call_time,omitempty"`
 }
 
 func leadToResponse(l lead.Lead) leadResponse {
 	r := leadResponse{
-		ID:              l.ID,
-		TenantID:        l.TenantID,
-		ListID:          l.ListID,
-		CampaignID:      l.CampaignID,
-		PhoneE164:       l.PhoneE164,
-		DialDestination: l.DialDestination,
-		FirstName:       l.FirstName,
-		LastName:        l.LastName,
-		Email:           l.Email,
-		Timezone:        l.Timezone,
-		StateCode:       l.StateCode,
-		Status:          string(l.Status),
-		Attempts:        l.Attempts,
-		CustomFields:    l.CustomFields,
-		CreatedAt:       l.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:       l.UpdatedAt.Format(time.RFC3339),
+		ID:                 l.ID,
+		TenantID:           l.TenantID,
+		ListID:             l.ListID,
+		CampaignID:         l.CampaignID,
+		PhoneE164:          l.PhoneE164,
+		DialDestination:    l.DialDestination,
+		FirstName:          l.FirstName,
+		LastName:           l.LastName,
+		Email:              l.Email,
+		Timezone:           l.Timezone,
+		StateCode:          l.StateCode,
+		Status:             string(l.Status),
+		Attempts:           l.Attempts,
+		CustomFields:       l.CustomFields,
+		CreatedAt:          l.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:          l.UpdatedAt.Format(time.RFC3339),
+		NCalls:             l.NCalls,
+		NAnswered:          l.NAnswered,
+		NRinged:            l.NRinged,
+		NVoicemail:         l.NVoicemail,
+		NTransferred:       l.NTransferred,
+		NTransferCompleted: l.NTransferCompleted,
+		NError:             l.NError,
+		NWentToDNC:         l.NWentToDNC,
 	}
 	if l.LastAttemptAt != nil {
 		s := l.LastAttemptAt.Format(time.RFC3339)
@@ -84,6 +102,14 @@ func leadToResponse(l lead.Lead) leadResponse {
 	if l.NextEligibleAt != nil {
 		s := l.NextEligibleAt.Format(time.RFC3339)
 		r.NextEligibleAt = &s
+	}
+	if l.FirstCallTime != nil {
+		s := l.FirstCallTime.Format(time.RFC3339)
+		r.FirstCallTime = &s
+	}
+	if l.LastCallTime != nil {
+		s := l.LastCallTime.Format(time.RFC3339)
+		r.LastCallTime = &s
 	}
 	return r
 }

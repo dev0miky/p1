@@ -389,7 +389,10 @@ func (a *tenantCampaigns) leads(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		rows, err := tx.Query(r.Context(), `
-			SELECT id, phone_e164, dial_destination, first_name, last_name, status, attempts, last_attempt_at, next_eligible_at, created_at
+			SELECT id, phone_e164, dial_destination, first_name, last_name, status, attempts,
+			       last_attempt_at, next_eligible_at, created_at,
+			       n_calls, n_answered, n_ringed, n_voicemail, n_transferred, n_transfer_completed, n_error, n_went_to_dnc,
+			       last_call_time
 			FROM leads
 			WHERE campaign_id = $1
 			ORDER BY id
@@ -401,26 +404,37 @@ func (a *tenantCampaigns) leads(w http.ResponseWriter, r *http.Request) {
 		defer rows.Close()
 		for rows.Next() {
 			var (
-				leadID       int64
-				phone        string
-				dialDest     *string
-				firstName    *string
-				lastName     *string
-				status       string
-				attempts     int
-				lastAttempt  *time.Time
-				nextEligible *time.Time
-				createdAt    time.Time
+				leadID                                                                                 int64
+				phone                                                                                  string
+				dialDest, firstName, lastName                                                          *string
+				status                                                                                 string
+				attempts                                                                               int
+				lastAttempt, nextEligible, lastCallTime                                                *time.Time
+				createdAt                                                                              time.Time
+				nCalls, nAnswered, nRinged, nVoicemail, nTransferred, nTransferCompleted, nError, nDNC int
 			)
-			if err := rows.Scan(&leadID, &phone, &dialDest, &firstName, &lastName, &status, &attempts, &lastAttempt, &nextEligible, &createdAt); err != nil {
+			if err := rows.Scan(
+				&leadID, &phone, &dialDest, &firstName, &lastName, &status, &attempts,
+				&lastAttempt, &nextEligible, &createdAt,
+				&nCalls, &nAnswered, &nRinged, &nVoicemail, &nTransferred, &nTransferCompleted, &nError, &nDNC,
+				&lastCallTime,
+			); err != nil {
 				return err
 			}
 			row := map[string]any{
-				"id":         leadID,
-				"phone_e164": phone,
-				"status":     status,
-				"attempts":   attempts,
-				"created_at": createdAt.Format(time.RFC3339),
+				"id":                   leadID,
+				"phone_e164":           phone,
+				"status":               status,
+				"attempts":             attempts,
+				"created_at":           createdAt.Format(time.RFC3339),
+				"n_calls":              nCalls,
+				"n_answered":           nAnswered,
+				"n_ringed":             nRinged,
+				"n_voicemail":          nVoicemail,
+				"n_transferred":        nTransferred,
+				"n_transfer_completed": nTransferCompleted,
+				"n_error":              nError,
+				"n_went_to_dnc":        nDNC,
 			}
 			if dialDest != nil {
 				row["dial_destination"] = *dialDest
@@ -436,6 +450,9 @@ func (a *tenantCampaigns) leads(w http.ResponseWriter, r *http.Request) {
 			}
 			if nextEligible != nil {
 				row["next_eligible_at"] = nextEligible.Format(time.RFC3339)
+			}
+			if lastCallTime != nil {
+				row["last_call_time"] = lastCallTime.Format(time.RFC3339)
 			}
 			out = append(out, row)
 		}
