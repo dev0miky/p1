@@ -6,6 +6,7 @@ import { CampaignDetailPage } from "@/pages/campaign-detail";
 import { SoundsPage } from "@/pages/sounds";
 import { ScriptsPage } from "@/pages/scripts";
 import { ListsPage } from "@/pages/lists";
+import { CallerIDsPage } from "@/pages/caller-ids";
 import { LeadsPage } from "@/pages/leads";
 import { DNCPage } from "@/pages/dnc";
 import { AdminTenantsPage } from "@/pages/admin-tenants";
@@ -69,6 +70,12 @@ const listsRoute = createRoute({
   component: ListsPage,
 });
 
+const callerIdsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/caller-ids",
+  component: CallerIDsPage,
+});
+
 const reportsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/reports",
@@ -125,6 +132,7 @@ const routeTree = rootRoute.addChildren([
   listsRoute,
   soundsRoute,
   scriptsRoute,
+  callerIdsRoute,
   dncRoute,
   reportsRoute,
   agentsRoute,

@@ -18,9 +18,18 @@ import (
 )
 
 type resourcesResponse struct {
-	Sounds  []attachedSoundResp  `json:"sounds"`
-	Scripts []attachedScriptResp `json:"scripts"`
-	Lists   []attachedListResp   `json:"lists"`
+	Sounds    []attachedSoundResp    `json:"sounds"`
+	Scripts   []attachedScriptResp   `json:"scripts"`
+	Lists     []attachedListResp     `json:"lists"`
+	CallerIDs []attachedCallerIDResp `json:"caller_ids"`
+}
+
+type attachedCallerIDResp struct {
+	CallerIDID  int64  `json:"caller_id_id"`
+	Name        string `json:"name"`
+	E164Number  string `json:"e164_number"`
+	Attestation string `json:"attestation"`
+	AttachedAt  string `json:"attached_at"`
 }
 
 type attachedSoundResp struct {
@@ -77,6 +86,15 @@ func (a *tenantCampaigns) listResources(w http.ResponseWriter, r *http.Request) 
 		for _, l := range lists {
 			resp.Lists = append(resp.Lists, attachedListResp{ListID: l.ListID, ListName: l.ListName, LeadCount: l.LeadCount, AttachedAt: l.AttachedAt})
 		}
+		callerIDs, err := a.cRepo.ListAttachedCallerIDsTx(r.Context(), tx, id)
+		if err != nil {
+			return err
+		}
+		for _, c := range callerIDs {
+			resp.CallerIDs = append(resp.CallerIDs, attachedCallerIDResp{
+				CallerIDID: c.CallerIDID, Name: c.Name, E164Number: c.E164Number, Attestation: c.Attestation, AttachedAt: c.AttachedAt,
+			})
+		}
 		return nil
 	})
 	if errors.Is(err, campaign.ErrNotFound) {
@@ -96,6 +114,9 @@ func (a *tenantCampaigns) listResources(w http.ResponseWriter, r *http.Request) 
 	}
 	if resp.Lists == nil {
 		resp.Lists = []attachedListResp{}
+	}
+	if resp.CallerIDs == nil {
+		resp.CallerIDs = []attachedCallerIDResp{}
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -326,6 +347,76 @@ func (a *tenantCampaigns) detachList(w http.ResponseWriter, r *http.Request) {
 	}
 	err = db.WithCtx(r.Context(), a.repo.Pool(), db.Ctx{Role: claims.Role, TenantID: tid, UserID: claims.UserID}, func(tx pgx.Tx) error {
 		return a.cRepo.DetachListTx(r.Context(), tx, campID, listID)
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "detach failed")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type attachCallerIDReq struct {
+	CallerIDID int64 `json:"caller_id_id"`
+}
+
+func (a *tenantCampaigns) attachCallerID(w http.ResponseWriter, r *http.Request) {
+	campID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var req attachCallerIDReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	if req.CallerIDID == 0 {
+		writeError(w, http.StatusBadRequest, "caller_id_id required")
+		return
+	}
+	claims, _ := auth.ClaimsFromContext(r.Context())
+	tid := claims.TenantID
+	if tid <= 0 {
+		writeError(w, http.StatusBadRequest, "no tenant context")
+		return
+	}
+	err = db.WithCtx(r.Context(), a.repo.Pool(), db.Ctx{Role: claims.Role, TenantID: tid, UserID: claims.UserID}, func(tx pgx.Tx) error {
+		if _, err := a.cRepo.GetTx(r.Context(), tx, campID); err != nil {
+			return err
+		}
+		return a.cRepo.AttachCallerIDTx(r.Context(), tx, campID, req.CallerIDID)
+	})
+	if errors.Is(err, campaign.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "campaign not found")
+		return
+	}
+	if err != nil {
+		slog.Error("attach caller_id failed", "err", err)
+		writeError(w, http.StatusInternalServerError, "attach failed")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *tenantCampaigns) detachCallerID(w http.ResponseWriter, r *http.Request) {
+	campID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	cidID, err := strconv.ParseInt(chi.URLParam(r, "caller_id_id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid caller_id_id")
+		return
+	}
+	claims, _ := auth.ClaimsFromContext(r.Context())
+	tid := claims.TenantID
+	if tid <= 0 {
+		writeError(w, http.StatusBadRequest, "no tenant context")
+		return
+	}
+	err = db.WithCtx(r.Context(), a.repo.Pool(), db.Ctx{Role: claims.Role, TenantID: tid, UserID: claims.UserID}, func(tx pgx.Tx) error {
+		return a.cRepo.DetachCallerIDTx(r.Context(), tx, campID, cidID)
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "detach failed")
