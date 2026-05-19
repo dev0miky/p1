@@ -16,13 +16,13 @@ func NewRepo() *Repo { return &Repo{} }
 
 const fields = `id, tenant_id, name, mode, status, dial_ratio, max_abandon_pct,
   prompt_audio, transfer_dest, caller_id_pool, retry_policy, calling_hours,
-  tz_strategy, dnc_list_ids, created_at, updated_at`
+  tz_strategy, dnc_list_ids, run_no, call_constraint, created_at, updated_at`
 
 func scanCampaign(row pgx.Row, c *Campaign) error {
 	return row.Scan(
 		&c.ID, &c.TenantID, &c.Name, &c.Mode, &c.Status, &c.DialRatio, &c.MaxAbandonPct,
 		&c.PromptAudio, &c.TransferDest, &c.CallerIDPool, &c.RetryPolicy, &c.CallingHours,
-		&c.TZStrategy, &c.DNCListIDs, &c.CreatedAt, &c.UpdatedAt,
+		&c.TZStrategy, &c.DNCListIDs, &c.RunNo, &c.CallConstraint, &c.CreatedAt, &c.UpdatedAt,
 	)
 }
 
@@ -107,6 +107,9 @@ func (r *Repo) ListTx(ctx context.Context, tx pgx.Tx) ([]Campaign, error) {
 }
 
 func (r *Repo) UpdateTx(ctx context.Context, tx pgx.Tx, id int64, patch UpdatePatch) (Campaign, error) {
+	// auto-bump run_no when status transitions from non-active -> active.
+	bumpRun := patch.Status == string(StatusActive)
+
 	var out Campaign
 	row := tx.QueryRow(ctx, `
 		UPDATE campaigns SET
@@ -121,12 +124,14 @@ func (r *Repo) UpdateTx(ctx context.Context, tx pgx.Tx, id int64, patch UpdatePa
 		  retry_policy = COALESCE($9, retry_policy),
 		  calling_hours = COALESCE($10, calling_hours),
 		  tz_strategy = COALESCE(NULLIF($11, ''), tz_strategy),
+		  call_constraint = COALESCE(NULLIF($12, ''), call_constraint),
+		  run_no = CASE WHEN $13::bool AND status != 'active' THEN run_no + 1 ELSE run_no END,
 		  updated_at = now()
-		WHERE id = $12
+		WHERE id = $14
 		RETURNING `+fields,
 		patch.Name, patch.Status, patch.Mode, patch.DialRatio, patch.MaxAbandonPct,
 		patch.PromptAudio, patch.TransferDest, patch.CallerIDPool, patch.RetryPolicy, patch.CallingHours,
-		patch.TZStrategy, id)
+		patch.TZStrategy, patch.CallConstraint, bumpRun, id)
 	err := scanCampaign(row, &out)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, ErrNotFound
@@ -135,15 +140,16 @@ func (r *Repo) UpdateTx(ctx context.Context, tx pgx.Tx, id int64, patch UpdatePa
 }
 
 type UpdatePatch struct {
-	Name          string
-	Status        string
-	Mode          string
-	DialRatio     *float64
-	MaxAbandonPct *float64
-	PromptAudio   *string
-	TransferDest  *string
-	CallerIDPool  json.RawMessage
-	RetryPolicy   json.RawMessage
-	CallingHours  json.RawMessage
-	TZStrategy    string
+	Name           string
+	Status         string
+	Mode           string
+	DialRatio      *float64
+	MaxAbandonPct  *float64
+	PromptAudio    *string
+	TransferDest   *string
+	CallerIDPool   json.RawMessage
+	RetryPolicy    json.RawMessage
+	CallingHours   json.RawMessage
+	TZStrategy     string
+	CallConstraint string
 }

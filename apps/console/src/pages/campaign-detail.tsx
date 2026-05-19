@@ -19,9 +19,27 @@ interface Campaign {
   status: "paused" | "active" | "completed" | "archived";
   dial_ratio: number;
   max_abandon_pct: number;
+  run_no: number;
+  call_constraint: string;
   created_at: string;
   updated_at: string;
 }
+
+const CALL_CONSTRAINTS: { value: string; label: string }[] = [
+  { value: "no_constraint", label: "no constraint (all leads)" },
+  { value: "only_answered", label: "only redial answered" },
+  { value: "only_human_answered", label: "only redial human-answered" },
+  { value: "only_machine_answered", label: "only redial machine/voicemail" },
+  { value: "only_transfers", label: "only redial transfers" },
+  { value: "only_failed_transfers", label: "only redial failed transfers" },
+  { value: "only_successful_transfers", label: "only redial successful transfers" },
+  { value: "only_errors", label: "only redial errors" },
+  { value: "skip_answered", label: "skip answered" },
+  { value: "skip_human_answered", label: "skip human-answered" },
+  { value: "skip_machine_answered", label: "skip machine/voicemail" },
+  { value: "skip_successful_transfers", label: "skip successful transfers" },
+  { value: "skip_errors", label: "skip errors" },
+];
 
 interface Stats {
   campaign_id: number;
@@ -173,6 +191,10 @@ export function CampaignDetailPage() {
             <span className="text-ink-600">·</span>
             <span>created {c.created_at.slice(0, 10)}</span>
             <span className="text-ink-600">·</span>
+            <span>
+              run <span className="text-ink-950 tnum">#{c.run_no}</span>
+            </span>
+            <span className="text-ink-600">·</span>
             <span className="flex items-center gap-2">
               <StatusDot kind={statusKindCampaign(c.status)} />
               <span className={isLive ? "text-phosphor" : "text-ink-950"}>{c.status}</span>
@@ -191,6 +213,10 @@ export function CampaignDetailPage() {
       </motion.div>
 
       <div className="mt-6 border-b border-ink-400" />
+
+      <motion.div variants={fadeUp}>
+        <RunPicker currentRun={c.run_no} running={isLive} />
+      </motion.div>
 
       <motion.div variants={fadeUp}>
         <KPITiles stats={statsQ.data} />
@@ -236,6 +262,46 @@ const fadeUp = {
   initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0, transition: { duration: 0.22 } },
 };
+
+function RunPicker({ currentRun, running }: { currentRun: number; running: boolean }) {
+  if (currentRun === 0) {
+    return (
+      <div className="my-6 flex items-center gap-3 font-mono text-2xs uppercase tracking-widest text-ink-700">
+        no runs yet — hit <span className="text-phosphor">▶ go live</span> to start run #1
+      </div>
+    );
+  }
+  const chips: number[] = [];
+  for (let n = currentRun; n >= Math.max(1, currentRun - 4); n--) chips.push(n);
+  return (
+    <div className="my-6 flex items-center gap-2 flex-wrap">
+      <span className="font-mono text-2xs uppercase tracking-widest text-ink-700 mr-2">runs</span>
+      <button
+        className="h-7 inline-flex items-center px-3 font-mono text-2xs uppercase tracking-widest border border-ink-400 text-ink-700 hover:text-ink-950 hover:border-ink-600 transition-all duration-150"
+      >
+        all
+      </button>
+      {chips.map((n) => {
+        const isCurrent = n === currentRun;
+        return (
+          <button
+            key={n}
+            className={clsx(
+              "h-7 inline-flex items-center px-3 font-mono text-2xs uppercase tracking-widest border transition-all duration-150 tabular-nums",
+              isCurrent
+                ? "bg-phosphor/[0.08] border-phosphor/40 text-phosphor"
+                : "border-ink-400 text-ink-700 hover:text-ink-950 hover:border-ink-600",
+              isCurrent && running && "animate-pulse-dot",
+            )}
+          >
+            #{n}
+            {isCurrent && <span className="ml-1.5 text-ink-700">current</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function SectionHeader({ title, right }: { title: string; right?: React.ReactNode }) {
   return (
@@ -495,16 +561,42 @@ function CallsTable({
 }
 
 function SettingsView({ campaign }: { campaign: Campaign }) {
+  const patch = useApiMutation<Campaign, { call_constraint: string }>(`/tenant/campaigns/${campaign.id}`, "PATCH", {
+    invalidate: ["campaign", "campaigns"],
+    onSuccess: () => toast.success("constraint updated"),
+    onError: (e) => toast.error("update failed", { description: e.message }),
+  });
   return (
     <div className="grid grid-cols-2 gap-x-8 gap-y-6">
       <SettingRow label="dial ratio" value={`${campaign.dial_ratio.toFixed(2)}×`} />
       <SettingRow label="max abandon" value={`${campaign.max_abandon_pct.toFixed(2)}%`} />
       <SettingRow label="mode" value={campaign.mode} />
       <SettingRow label="status" value={campaign.status} />
+      <SettingRow label="run no" value={`#${campaign.run_no}`} />
       <SettingRow label="last updated" value={fmtAt(campaign.updated_at)} />
+      <div className="col-span-2">
+        <p className="font-mono text-2xs uppercase tracking-widest text-ink-700 mb-2">
+          call constraint
+        </p>
+        <select
+          value={campaign.call_constraint}
+          disabled={patch.isPending}
+          onChange={(e) => patch.mutate({ call_constraint: e.target.value })}
+          className="bg-ink-50 font-mono text-sm text-ink-950 border border-ink-400 px-3 py-2 hover:border-ink-700 focus:outline-none focus:border-phosphor disabled:opacity-50 min-w-[20rem]"
+        >
+          {CALL_CONSTRAINTS.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        <p className="mt-2 font-mono text-2xs uppercase tracking-widest text-ink-700">
+          applied at lead claim time. takes effect on the next dialer tick.
+        </p>
+      </div>
       <div className="col-span-2 mt-4">
         <p className="font-mono text-2xs uppercase tracking-widest text-ink-700">
-          (full settings editor lands with the campaign builder wizard PR — for now use the campaigns list page to start/pause)
+          (full settings editor + resource attachments land with the campaign builder wizard PR)
         </p>
       </div>
     </div>
