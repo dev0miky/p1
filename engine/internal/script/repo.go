@@ -11,10 +11,10 @@ type Repo struct{}
 
 func NewRepo() *Repo { return &Repo{} }
 
-const fields = `id, tenant_id, name, description, type, body, tags, created_at, updated_at`
+const fields = `id, tenant_id, name, description, type, body, transfer_to, tags, created_at, updated_at`
 
 func scan(row pgx.Row, s *Script) error {
-	return row.Scan(&s.ID, &s.TenantID, &s.Name, &s.Description, &s.Type, &s.Body, &s.Tags, &s.CreatedAt, &s.UpdatedAt)
+	return row.Scan(&s.ID, &s.TenantID, &s.Name, &s.Description, &s.Type, &s.Body, &s.TransferTo, &s.Tags, &s.CreatedAt, &s.UpdatedAt)
 }
 
 func (r *Repo) CreateTx(ctx context.Context, tx pgx.Tx, s Script) (Script, error) {
@@ -23,10 +23,10 @@ func (r *Repo) CreateTx(ctx context.Context, tx pgx.Tx, s Script) (Script, error
 	}
 	var out Script
 	row := tx.QueryRow(ctx, `
-		INSERT INTO scripts (tenant_id, name, description, type, body, tags)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO scripts (tenant_id, name, description, type, body, transfer_to, tags)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING `+fields,
-		s.TenantID, s.Name, s.Description, s.Type, s.Body, s.Tags,
+		s.TenantID, s.Name, s.Description, s.Type, s.Body, s.TransferTo, s.Tags,
 	)
 	return out, scan(row, &out)
 }
@@ -59,12 +59,14 @@ func (r *Repo) ListTx(ctx context.Context, tx pgx.Tx) ([]Script, error) {
 }
 
 type UpdatePatch struct {
-	Name        string
-	Description *string
-	Type        string
-	Body        *string
-	Tags        []string
-	SetTags     bool
+	Name          string
+	Description   *string
+	Type          string
+	Body          *string
+	TransferTo    *string
+	SetTransferTo bool
+	Tags          []string
+	SetTags       bool
 }
 
 func (r *Repo) UpdateTx(ctx context.Context, tx pgx.Tx, id int64, patch UpdatePatch) (Script, error) {
@@ -83,11 +85,12 @@ func (r *Repo) UpdateTx(ctx context.Context, tx pgx.Tx, id int64, patch UpdatePa
 		  description = COALESCE($2, description),
 		  type        = COALESCE(NULLIF($3, ''), type),
 		  body        = COALESCE($4, body),
-		  tags        = COALESCE($5, tags),
+		  transfer_to = CASE WHEN $5::boolean THEN $6 ELSE transfer_to END,
+		  tags        = COALESCE($7, tags),
 		  updated_at  = now()
-		WHERE id = $6
+		WHERE id = $8
 		RETURNING `+fields,
-		patch.Name, patch.Description, patch.Type, patch.Body, tagsPtr, id,
+		patch.Name, patch.Description, patch.Type, patch.Body, patch.SetTransferTo, patch.TransferTo, tagsPtr, id,
 	)
 	err := scan(row, &out)
 	if errors.Is(err, pgx.ErrNoRows) {

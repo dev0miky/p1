@@ -29,6 +29,7 @@ type Script struct {
 	Description *string
 	Type        Type
 	Body        string
+	TransferTo  *string
 	Tags        []string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time

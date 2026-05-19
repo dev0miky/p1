@@ -132,6 +132,7 @@ services:
       - ./deploy/freeswitch/sip_profiles:/etc/freeswitch/sip_profiles:ro
       - ./deploy/freeswitch/dialplan:/etc/freeswitch/dialplan:ro
       - ./deploy/freeswitch/scripts:/usr/share/freeswitch/scripts:ro
+      - sounds-data:/data/sounds:ro
 
   coturn:
     image: coturn/coturn:latest

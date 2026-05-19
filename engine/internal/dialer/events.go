@@ -12,6 +12,7 @@ type StateAdvance struct {
 	To            fsm.State
 	Reason        string
 	HangupCause   string
+	Digit         string
 	StampAnswered bool
 	StampEnded    bool
 }
@@ -34,6 +35,23 @@ func EventToTransition(e esl.Event) (StateAdvance, bool) {
 			Reason:        "channel_answer",
 			StampAnswered: true,
 		}, true
+	case "CHANNEL_BRIDGE":
+		return StateAdvance{
+			UUID:   e.UniqueID,
+			To:     fsm.StateBridged,
+			Reason: "channel_bridge",
+		}, true
+	case "DTMF":
+		return dtmfToTransition(e)
+	case "CUSTOM":
+		if e.Get("Event-Subclass") == "avmd::beep" {
+			return StateAdvance{
+				UUID:   e.UniqueID,
+				To:     fsm.StateVoicemail,
+				Reason: "avmd_beep",
+			}, true
+		}
+		return StateAdvance{}, false
 	case "CHANNEL_HANGUP_COMPLETE":
 		next := hangupToState(e.HangupCause)
 		return StateAdvance{
@@ -42,6 +60,27 @@ func EventToTransition(e esl.Event) (StateAdvance, bool) {
 			Reason:      "hangup:" + strings.ToLower(e.HangupCause),
 			HangupCause: e.HangupCause,
 			StampEnded:  true,
+		}, true
+	}
+	return StateAdvance{}, false
+}
+
+func dtmfToTransition(e esl.Event) (StateAdvance, bool) {
+	d := e.Get("DTMF-Digit")
+	switch d {
+	case "1":
+		return StateAdvance{
+			UUID:   e.UniqueID,
+			To:     fsm.StatePress1,
+			Reason: "dtmf:1",
+			Digit:  "1",
+		}, true
+	case "9":
+		return StateAdvance{
+			UUID:   e.UniqueID,
+			To:     fsm.StateOptOut,
+			Reason: "dtmf:9",
+			Digit:  "9",
 		}, true
 	}
 	return StateAdvance{}, false

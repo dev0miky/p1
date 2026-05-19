@@ -20,6 +20,7 @@ interface Script {
   description?: string;
   type: "press1" | "broadcast" | "survey" | "custom";
   body: string;
+  transfer_to?: string | null;
   tags: string[];
   created_at: string;
   updated_at: string;
@@ -62,11 +63,19 @@ export function ScriptsPage() {
       ),
     },
     {
-      key: "lines",
-      header: "Lines",
-      width: "0.7fr",
-      align: "right",
-      render: (s) => <span className="data-cell text-ink-700">{s.body ? s.body.split("\n").length : 0}</span>,
+      key: "transfer",
+      header: "Transfer →",
+      width: "1.5fr",
+      render: (s) =>
+        s.type === "press1" ? (
+          s.transfer_to ? (
+            <span className="data-cell text-phosphor truncate">{s.transfer_to}</span>
+          ) : (
+            <span className="font-mono text-2xs uppercase tracking-widest text-danger">not set</span>
+          )
+        ) : (
+          <span className="text-ink-700">—</span>
+        ),
     },
     {
       key: "tags",
@@ -140,14 +149,14 @@ function CreateModal({
   const [description, setDescription] = useState("");
   const [type, setType] = useState<(typeof TYPES)[number]>("press1");
   const [body, setBody] = useState("");
+  const [transferTo, setTransferTo] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
-  const create = useApiMutation<Script, { name: string; description?: string; type: string; body: string; tags?: string[] }>(
-    "/tenant/scripts/",
-    "POST",
-    { invalidate: ["scripts"] },
-  );
+  const create = useApiMutation<
+    Script,
+    { name: string; description?: string; type: string; body: string; transfer_to?: string | null; tags?: string[] }
+  >("/tenant/scripts/", "POST", { invalidate: ["scripts"] });
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -158,6 +167,7 @@ function CreateModal({
         description: description || undefined,
         type,
         body,
+        transfer_to: type === "press1" && transferTo ? transferTo : undefined,
         tags: tags.length > 0 ? tags : undefined,
       });
       toast.success("script created", { description: created.name });
@@ -165,6 +175,7 @@ function CreateModal({
       setDescription("");
       setType("press1");
       setBody("");
+      setTransferTo("");
       setTags([]);
       onCreated();
       onClose();
@@ -213,6 +224,19 @@ function CreateModal({
             className="mt-2 w-full bg-ink-50 border border-ink-400 px-3 py-2 font-mono text-sm text-ink-950 placeholder:text-ink-600 focus:outline-none focus:border-phosphor"
           />
         </div>
+        {type === "press1" && (
+          <div>
+            <Label hint="dial-string the engine bridges to on press-1 · e.g. sofia/gateway/voxtelesys/+15551234567 or 1001@tenant.sip.internal">
+              Transfer target
+            </Label>
+            <Input
+              value={transferTo}
+              onChange={(e) => setTransferTo(e.target.value)}
+              className="font-mono"
+              placeholder="sofia/gateway/voxtelesys/+15551234567"
+            />
+          </div>
+        )}
         <div>
           <Label hint="optional · lowercase, dash-separated">Tags</Label>
           <TagInput value={tags} onChange={setTags} placeholder="spring, q2, voicemail-drop" />
@@ -245,14 +269,14 @@ function EditModal({
   const [description, setDescription] = useState(script?.description ?? "");
   const [type, setType] = useState<Script["type"]>(script?.type ?? "press1");
   const [body, setBody] = useState(script?.body ?? "");
+  const [transferTo, setTransferTo] = useState(script?.transfer_to ?? "");
   const [tags, setTags] = useState<string[]>(script?.tags ?? []);
   const [err, setErr] = useState<string | null>(null);
 
-  const patch = useApiMutation<Script, { name?: string; description?: string; type?: string; body?: string; tags?: string[] }>(
-    `/tenant/scripts/${script?.id ?? 0}`,
-    "PATCH",
-    { invalidate: ["scripts"] },
-  );
+  const patch = useApiMutation<
+    Script,
+    { name?: string; description?: string; type?: string; body?: string; transfer_to?: string | null; tags?: string[] }
+  >(`/tenant/scripts/${script?.id ?? 0}`, "PATCH", { invalidate: ["scripts"] });
 
   const del = useApiMutation<void, void>(`/tenant/scripts/${script?.id ?? 0}`, "DELETE", {
     invalidate: ["scripts"],
@@ -269,6 +293,7 @@ function EditModal({
     setDescription(script.description ?? "");
     setType(script.type);
     setBody(script.body);
+    setTransferTo(script.transfer_to ?? "");
     setTags(script.tags ?? []);
     setErr(null);
   }, [script]);
@@ -278,7 +303,14 @@ function EditModal({
     setErr(null);
     if (!script) return;
     try {
-      await patch.mutateAsync({ name, description, type, body, tags });
+      await patch.mutateAsync({
+        name,
+        description,
+        type,
+        body,
+        transfer_to: type === "press1" ? transferTo || null : null,
+        tags,
+      });
       toast.success("script saved", { description: name });
       onSaved();
       onClose();
@@ -317,6 +349,19 @@ function EditModal({
             ))}
           </div>
         </div>
+        {type === "press1" && (
+          <div>
+            <Label hint="dial-string the engine bridges to on press-1 · sofia/gateway/<gw>/+15551234567 or 1001@tenant.sip.internal">
+              Transfer target
+            </Label>
+            <Input
+              value={transferTo}
+              onChange={(e) => setTransferTo(e.target.value)}
+              className="font-mono"
+              placeholder="sofia/gateway/voxtelesys/+15551234567"
+            />
+          </div>
+        )}
         <div>
           <Label>Tags</Label>
           <TagInput value={tags} onChange={setTags} placeholder="add a tag" />

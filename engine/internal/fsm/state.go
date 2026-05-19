@@ -59,6 +59,8 @@ var validTransitions = map[State]map[State]bool{
 	StateAnswered: {
 		StateAMDRunning: true,
 		StatePlayingMsg: true,
+		StatePress1:     true,
+		StateOptOut:     true,
 		StateCompleted:  true,
 		StateFailed:     true,
 	},

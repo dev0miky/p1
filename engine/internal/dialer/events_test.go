@@ -86,6 +86,86 @@ func TestUnknownEventIgnored(t *testing.T) {
 	}
 }
 
+func TestDTMFOneTransitionsToPress1(t *testing.T) {
+	e := esl.ParseEvent(map[string]string{
+		"Event-Name": "DTMF",
+		"Unique-ID":  "uuid",
+		"DTMF-Digit": "1",
+	})
+	got, ok := EventToTransition(e)
+	if !ok {
+		t.Fatal("DTMF=1 must map")
+	}
+	if got.To != fsm.StatePress1 {
+		t.Errorf("to: %s", got.To)
+	}
+	if got.Digit != "1" {
+		t.Errorf("digit not carried: %q", got.Digit)
+	}
+}
+
+func TestDTMFNineTransitionsToOptOut(t *testing.T) {
+	e := esl.ParseEvent(map[string]string{
+		"Event-Name": "DTMF",
+		"Unique-ID":  "uuid",
+		"DTMF-Digit": "9",
+	})
+	got, ok := EventToTransition(e)
+	if !ok || got.To != fsm.StateOptOut {
+		t.Errorf("DTMF=9 expected OptOut, got %+v ok=%v", got, ok)
+	}
+	if got.Digit != "9" {
+		t.Errorf("digit not carried: %q", got.Digit)
+	}
+}
+
+func TestDTMFOtherDigitsIgnored(t *testing.T) {
+	for _, d := range []string{"0", "2", "3", "4", "5", "6", "7", "8", "*", "#"} {
+		e := esl.ParseEvent(map[string]string{
+			"Event-Name": "DTMF",
+			"Unique-ID":  "uuid",
+			"DTMF-Digit": d,
+		})
+		if _, ok := EventToTransition(e); ok {
+			t.Errorf("DTMF=%q should be ignored", d)
+		}
+	}
+}
+
+func TestAvmdBeepTransitionsToVoicemail(t *testing.T) {
+	e := esl.ParseEvent(map[string]string{
+		"Event-Name":     "CUSTOM",
+		"Event-Subclass": "avmd::beep",
+		"Unique-ID":      "uuid",
+	})
+	got, ok := EventToTransition(e)
+	if !ok || got.To != fsm.StateVoicemail {
+		t.Errorf("avmd::beep expected Voicemail, got %+v ok=%v", got, ok)
+	}
+}
+
+func TestUnrelatedCustomSubclassIgnored(t *testing.T) {
+	e := esl.ParseEvent(map[string]string{
+		"Event-Name":     "CUSTOM",
+		"Event-Subclass": "sofia::register",
+		"Unique-ID":      "uuid",
+	})
+	if _, ok := EventToTransition(e); ok {
+		t.Error("CUSTOM sofia::register must be ignored by transition mapper")
+	}
+}
+
+func TestChannelBridgeTransitionsToBridged(t *testing.T) {
+	e := esl.ParseEvent(map[string]string{
+		"Event-Name": "CHANNEL_BRIDGE",
+		"Unique-ID":  "uuid",
+	})
+	got, ok := EventToTransition(e)
+	if !ok || got.To != fsm.StateBridged {
+		t.Errorf("CHANNEL_BRIDGE expected Bridged, got %+v ok=%v", got, ok)
+	}
+}
+
 func TestCounterDeltaForCoversAllOutcomes(t *testing.T) {
 	cases := []struct {
 		state fsm.State

@@ -156,6 +156,7 @@ func ValidSoundRole(s string) bool {
 type AttachedSound struct {
 	SoundID    int64
 	SoundName  string
+	FileKey    string
 	Role       string
 	AttachedAt string
 }
@@ -164,6 +165,7 @@ type AttachedScript struct {
 	ScriptID   int64
 	ScriptName string
 	Type       string
+	TransferTo *string
 	AttachedAt string
 }
 
@@ -199,7 +201,7 @@ func (r *Repo) DetachSoundTx(ctx context.Context, tx pgx.Tx, campaignID, soundID
 
 func (r *Repo) ListAttachedSoundsTx(ctx context.Context, tx pgx.Tx, campaignID int64) ([]AttachedSound, error) {
 	rows, err := tx.Query(ctx, `
-		SELECT cs.sound_id, s.name, cs.role, cs.attached_at::text
+		SELECT cs.sound_id, s.name, s.file_key, cs.role, cs.attached_at::text
 		FROM campaign_sounds cs
 		JOIN sounds s ON s.id = cs.sound_id
 		WHERE cs.campaign_id = $1
@@ -212,7 +214,7 @@ func (r *Repo) ListAttachedSoundsTx(ctx context.Context, tx pgx.Tx, campaignID i
 	var out []AttachedSound
 	for rows.Next() {
 		var a AttachedSound
-		if err := rows.Scan(&a.SoundID, &a.SoundName, &a.Role, &a.AttachedAt); err != nil {
+		if err := rows.Scan(&a.SoundID, &a.SoundName, &a.FileKey, &a.Role, &a.AttachedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -235,7 +237,7 @@ func (r *Repo) DetachScriptTx(ctx context.Context, tx pgx.Tx, campaignID, script
 
 func (r *Repo) ListAttachedScriptsTx(ctx context.Context, tx pgx.Tx, campaignID int64) ([]AttachedScript, error) {
 	rows, err := tx.Query(ctx, `
-		SELECT cs.script_id, s.name, s.type, cs.attached_at::text
+		SELECT cs.script_id, s.name, s.type, s.transfer_to, cs.attached_at::text
 		FROM campaign_scripts cs
 		JOIN scripts s ON s.id = cs.script_id
 		WHERE cs.campaign_id = $1
@@ -248,7 +250,7 @@ func (r *Repo) ListAttachedScriptsTx(ctx context.Context, tx pgx.Tx, campaignID 
 	var out []AttachedScript
 	for rows.Next() {
 		var a AttachedScript
-		if err := rows.Scan(&a.ScriptID, &a.ScriptName, &a.Type, &a.AttachedAt); err != nil {
+		if err := rows.Scan(&a.ScriptID, &a.ScriptName, &a.Type, &a.TransferTo, &a.AttachedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, a)

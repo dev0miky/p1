@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -19,6 +20,10 @@ import (
 	"p1/engine/internal/tenant"
 )
 
+func normalizeTransferTo(s string) string {
+	return strings.TrimSpace(s)
+}
+
 type tenantScripts struct {
 	repo  *tenant.Repo
 	sRepo *script.Repo
@@ -29,6 +34,7 @@ type createScriptRequest struct {
 	Description *string  `json:"description"`
 	Type        string   `json:"type"`
 	Body        string   `json:"body"`
+	TransferTo  *string  `json:"transfer_to"`
 	Tags        []string `json:"tags"`
 }
 
@@ -39,6 +45,7 @@ type scriptResponse struct {
 	Description *string  `json:"description,omitempty"`
 	Type        string   `json:"type"`
 	Body        string   `json:"body"`
+	TransferTo  *string  `json:"transfer_to,omitempty"`
 	Tags        []string `json:"tags"`
 	CreatedAt   string   `json:"created_at"`
 	UpdatedAt   string   `json:"updated_at"`
@@ -56,6 +63,7 @@ func scriptToResponse(s script.Script) scriptResponse {
 		Description: s.Description,
 		Type:        string(s.Type),
 		Body:        s.Body,
+		TransferTo:  s.TransferTo,
 		Tags:        tags,
 		CreatedAt:   s.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:   s.UpdatedAt.Format(time.RFC3339),
@@ -82,12 +90,21 @@ func (a *tenantScripts) create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "no tenant context")
 		return
 	}
+	if req.TransferTo != nil {
+		t := normalizeTransferTo(*req.TransferTo)
+		if t == "" {
+			req.TransferTo = nil
+		} else {
+			req.TransferTo = &t
+		}
+	}
 	s := script.Script{
 		TenantID:    tid,
 		Name:        req.Name,
 		Description: req.Description,
 		Type:        script.Type(req.Type),
 		Body:        req.Body,
+		TransferTo:  req.TransferTo,
 		Tags:        req.Tags,
 	}
 	var created script.Script
@@ -188,6 +205,19 @@ func (a *tenantScripts) update(w http.ResponseWriter, r *http.Request) {
 	}
 	if v, ok := raw["body"]; ok {
 		_ = json.Unmarshal(v, &patch.Body)
+	}
+	if v, ok := raw["transfer_to"]; ok {
+		patch.SetTransferTo = true
+		var s *string
+		_ = json.Unmarshal(v, &s)
+		if s != nil {
+			t := normalizeTransferTo(*s)
+			if t == "" {
+				patch.TransferTo = nil
+			} else {
+				patch.TransferTo = &t
+			}
+		}
 	}
 	if v, ok := raw["tags"]; ok {
 		patch.SetTags = true
