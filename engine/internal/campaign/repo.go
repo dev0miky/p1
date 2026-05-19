@@ -172,6 +172,9 @@ type AttachedScript struct {
 	PreBridgeSoundID  *int64
 	PreBridgeFileKey  *string
 	PreBridgeTenantID *int64
+	BridgeDigit       string
+	WaitTimeoutMS     int
+	OptOutDigit       *string
 	AttachedAt        string
 }
 
@@ -246,6 +249,7 @@ func (r *Repo) ListAttachedScriptsTx(ctx context.Context, tx pgx.Tx, campaignID 
 		SELECT cs.script_id, s.name, s.type, s.transfer_to,
 		       s.greeting_sound_id,   gs.file_key,  gs.tenant_id,
 		       s.pre_bridge_sound_id, pbs.file_key, pbs.tenant_id,
+		       s.bridge_digit, s.wait_timeout_ms, s.opt_out_digit,
 		       cs.attached_at::text
 		FROM campaign_scripts cs
 		JOIN scripts s ON s.id = cs.script_id
@@ -265,6 +269,7 @@ func (r *Repo) ListAttachedScriptsTx(ctx context.Context, tx pgx.Tx, campaignID 
 			&a.ScriptID, &a.ScriptName, &a.Type, &a.TransferTo,
 			&a.GreetingSoundID, &a.GreetingFileKey, &a.GreetingTenantID,
 			&a.PreBridgeSoundID, &a.PreBridgeFileKey, &a.PreBridgeTenantID,
+			&a.BridgeDigit, &a.WaitTimeoutMS, &a.OptOutDigit,
 			&a.AttachedAt,
 		); err != nil {
 			return nil, err
