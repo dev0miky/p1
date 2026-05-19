@@ -17,6 +17,7 @@ import (
 	"p1/engine/internal/auth"
 	"p1/engine/internal/config"
 	"p1/engine/internal/db"
+	"p1/engine/internal/sound"
 	"p1/engine/internal/tenant"
 	"p1/engine/migrations"
 )
@@ -68,11 +69,21 @@ func serve(cfg config.Config, logger *slog.Logger) error {
 	repo := tenant.NewRepo(pool)
 	iss := auth.NewIssuer(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTTTL)
 
+	soundDir := os.Getenv("SOUND_STORAGE_DIR")
+	if soundDir == "" {
+		soundDir = "/data/sounds"
+	}
+	soundStorage, err := sound.NewStorage(soundDir)
+	if err != nil {
+		return fmt.Errorf("sound storage init: %w", err)
+	}
+
 	handler := api.NewRouter(api.Config{
 		Repo:           repo,
 		Issuer:         iss,
 		Logger:         logger,
 		AllowedOrigins: cfg.AllowedOrigins,
+		SoundStorage:   soundStorage,
 	})
 
 	srv := &http.Server{

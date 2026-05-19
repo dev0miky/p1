@@ -14,6 +14,8 @@ import (
 	"p1/engine/internal/dnc"
 	"p1/engine/internal/fsm"
 	"p1/engine/internal/lead"
+	"p1/engine/internal/script"
+	"p1/engine/internal/sound"
 	"p1/engine/internal/tenant"
 )
 
@@ -22,6 +24,7 @@ type Config struct {
 	Issuer         *auth.Issuer
 	Logger         *slog.Logger
 	AllowedOrigins []string
+	SoundStorage   *sound.Storage
 }
 
 func NewRouter(cfg Config) http.Handler {
@@ -137,6 +140,43 @@ func NewRouter(cfg Config) http.Handler {
 		r.Get("/", tenD.list)
 		r.Delete("/{phone}", tenD.remove)
 		r.Get("/check", tenD.check)
+	})
+
+	tenLL := &tenantLeadLists{repo: cfg.Repo, lRepo: lRepo}
+	r.Route("/tenant/lists", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireTenant)
+		r.Use(auth.RequireAction(auth.ActionManageLeads))
+		r.Post("/", tenLL.create)
+		r.Get("/", tenLL.list)
+		r.Get("/{id}", tenLL.get)
+		r.Patch("/{id}", tenLL.update)
+		r.Delete("/{id}", tenLL.delete)
+	})
+
+	tenScripts := &tenantScripts{repo: cfg.Repo, sRepo: script.NewRepo()}
+	r.Route("/tenant/scripts", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireTenant)
+		r.Use(auth.RequireAction(auth.ActionManageCampaigns))
+		r.Post("/", tenScripts.create)
+		r.Get("/", tenScripts.list)
+		r.Get("/{id}", tenScripts.get)
+		r.Patch("/{id}", tenScripts.update)
+		r.Delete("/{id}", tenScripts.delete)
+	})
+
+	tenSounds := &tenantSounds{repo: cfg.Repo, sRepo: sound.NewRepo(), storage: cfg.SoundStorage}
+	r.Route("/tenant/sounds", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireTenant)
+		r.Use(auth.RequireAction(auth.ActionManageCampaigns))
+		r.Post("/", tenSounds.create)
+		r.Get("/", tenSounds.list)
+		r.Get("/{id}", tenSounds.get)
+		r.Get("/{id}/download", tenSounds.download)
+		r.Patch("/{id}", tenSounds.update)
+		r.Delete("/{id}", tenSounds.delete)
 	})
 
 	return r

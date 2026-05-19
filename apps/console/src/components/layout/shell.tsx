@@ -13,6 +13,9 @@ interface NavItem {
 const tenantNav: NavItem[] = [
   { label: "Campaigns", href: "/campaigns" },
   { label: "Leads", href: "/leads" },
+  { label: "Lists", href: "/lists" },
+  { label: "Sounds", href: "/sounds" },
+  { label: "Scripts", href: "/scripts" },
   { label: "Agents", href: "/agents" },
   { label: "DNC", href: "/dnc" },
   { label: "Users", href: "/users" },
