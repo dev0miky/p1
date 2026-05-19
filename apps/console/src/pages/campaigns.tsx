@@ -1,19 +1,17 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useApiMutation, useApiQuery } from "@/lib/hooks";
 import {
   Button,
   EmptyState,
   ErrorBanner,
-  Input,
-  Label,
-  Modal,
   PageHeader,
   StatusDot,
 } from "@/components/ui";
 import { Table, type Column } from "@/components/table";
 import { ApiError } from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { CampaignWizard } from "@/pages/campaign-wizard";
 
 interface Campaign {
   id: number;
@@ -144,7 +142,7 @@ export function CampaignsPage() {
         )}
       </div>
 
-      <CreateModal
+      <CampaignWizard
         open={creating}
         onClose={() => setCreating(false)}
         onCreated={() => list.refetch()}
@@ -180,100 +178,3 @@ function StartStop({ campaign, onChanged }: { campaign: Campaign; onChanged: () 
   );
 }
 
-const modes = ["press1", "broadcast", "predictive", "preview"] as const;
-
-function CreateModal({
-  open,
-  onClose,
-  onCreated,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [mode, setMode] = useState<(typeof modes)[number]>("press1");
-  const [dialRatio, setDialRatio] = useState("1.0");
-  const [err, setErr] = useState<string | null>(null);
-
-  const create = useApiMutation<Campaign, { name: string; mode: string; dial_ratio: number }>(
-    "/tenant/campaigns/",
-    "POST",
-    { invalidate: ["campaigns"] }
-  );
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setErr(null);
-    try {
-      const created = await create.mutateAsync({ name, mode, dial_ratio: parseFloat(dialRatio) || 1.0 });
-      toast.success("campaign created", { description: `${created.name} · paused` });
-      setName("");
-      setMode("press1");
-      setDialRatio("1.0");
-      onCreated();
-      onClose();
-    } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "create failed");
-    }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="New campaign">
-      <form onSubmit={submit} className="space-y-6">
-        <div>
-          <Label hint="must be unique within tenant">Name</Label>
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            placeholder="spring-broadcast-q2"
-          />
-        </div>
-        <div>
-          <Label hint="press-1 needs agents; broadcast doesn't">Mode</Label>
-          <div className="mt-2 grid grid-cols-4 gap-px bg-ink-400 border border-ink-400">
-            {modes.map((m) => (
-              <button
-                type="button"
-                key={m}
-                onClick={() => setMode(m)}
-                className={`px-3 h-10 font-mono text-2xs uppercase tracking-widest transition-colors ${
-                  mode === m
-                    ? "bg-phosphor text-ink-0"
-                    : "bg-ink-100 text-ink-800 hover:bg-ink-200 hover:text-ink-950"
-                }`}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <Label hint="lines per agent (predictive) / fixed (broadcast)">Dial ratio</Label>
-          <Input
-            type="number"
-            min="0.1"
-            max="10"
-            step="0.1"
-            value={dialRatio}
-            onChange={(e) => setDialRatio(e.target.value)}
-            className="font-mono"
-          />
-        </div>
-        {err && <ErrorBanner>{err}</ErrorBanner>}
-        <div className="flex items-center justify-end gap-3 border-t border-ink-400 pt-5">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            cancel
-          </Button>
-          <Button type="submit" disabled={create.isPending}>
-            {create.isPending ? "creating..." : "create paused"}
-          </Button>
-        </div>
-        <p className="font-mono text-2xs uppercase tracking-widest text-ink-700">
-          campaign starts paused. activate from the table when ready.
-        </p>
-      </form>
-    </Modal>
-  );
-}
