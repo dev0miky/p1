@@ -138,7 +138,7 @@ export function Table<T>({
             key={c.key}
             onClick={c.sortable ? () => toggleSort(c.key) : undefined}
             className={clsx(
-              "bg-ink-100 h-9 px-5 flex items-center font-mono text-2xs uppercase tracking-widest text-ink-700",
+              "bg-ink-100 h-9 px-5 flex items-center min-w-0 font-mono text-2xs uppercase tracking-widest text-ink-700",
               c.sortable && "cursor-pointer hover:text-ink-950 group select-none",
               c.align === "right" && "justify-end",
               c.align === "center" && "justify-center"
@@ -208,7 +208,7 @@ export function Table<T>({
                       className={clsx(
                         bg,
                         rowH,
-                        "px-5 py-3 flex items-center",
+                        "px-5 py-3 flex items-center min-w-0",
                         c.align === "right" && "justify-end",
                         c.align === "center" && "justify-center"
                       )}
