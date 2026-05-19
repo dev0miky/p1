@@ -1,14 +1,26 @@
-import { useState, type FormEvent } from "react";
-import { motion } from "motion/react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useApiMutation, useApiQuery } from "@/lib/hooks";
-import { Button, EmptyState, ErrorBanner, Input, Label, Modal, PageHeader, StatusDot } from "@/components/ui";
+import {
+  Button,
+  EmptyState,
+  ErrorBanner,
+  Input,
+  Label,
+  Modal,
+  PageHeader,
+  StatusDot,
+} from "@/components/ui";
+import { Table, type Column } from "@/components/table";
+import { LeadDetail, type LeadForDetail } from "@/components/lead-detail";
 import { ApiError } from "@/lib/api";
+import { toast } from "@/lib/toast";
 
 interface Lead {
   id: number;
   tenant_id: number;
   campaign_id?: number;
   phone_e164: string;
+  dial_destination?: string;
   first_name?: string;
   last_name?: string;
   status: string;
@@ -34,16 +46,93 @@ const PAGE = 50;
 export function LeadsPage() {
   const [offset, setOffset] = useState(0);
   const [creating, setCreating] = useState(false);
+  const [openLeadId, setOpenLeadId] = useState<number | null>(null);
 
-  const list = useApiQuery<ListResp>(
-    ["leads", offset],
-    `/tenant/leads/?limit=${PAGE}&offset=${offset}`,
-  );
+  const list = useApiQuery<ListResp>(["leads", offset], `/tenant/leads/?limit=${PAGE}&offset=${offset}`);
   const campaigns = useApiQuery<{ campaigns: Campaign[] }>(["campaigns-for-leads"], "/tenant/campaigns/");
   const campaignOptions = campaigns.data?.campaigns ?? [];
 
+  const rows = list.data?.leads ?? [];
   const total = list.data?.total ?? 0;
-  const showing = list.data?.leads?.length ?? 0;
+
+  const openLead = useMemo<LeadForDetail | null>(() => {
+    if (openLeadId === null) return null;
+    const l = rows.find((r) => r.id === openLeadId);
+    if (!l) return null;
+    return l as LeadForDetail;
+  }, [openLeadId, rows]);
+
+  function step(dir: -1 | 1) {
+    if (openLeadId === null) return;
+    const idx = rows.findIndex((r) => r.id === openLeadId);
+    if (idx === -1) return;
+    const nextIdx = idx + dir;
+    if (nextIdx < 0 || nextIdx >= rows.length) return;
+    setOpenLeadId(rows[nextIdx].id);
+  }
+
+  const columns: Column<Lead>[] = [
+    {
+      key: "phone",
+      header: "Phone",
+      width: "1.4fr",
+      sortable: true,
+      sortValue: (r) => r.phone_e164,
+      render: (r) => <span className="data-cell text-ink-950">{r.phone_e164}</span>,
+    },
+    {
+      key: "name",
+      header: "Name",
+      width: "1.4fr",
+      render: (r) => {
+        const name = [r.first_name, r.last_name].filter(Boolean).join(" ");
+        return name ? (
+          <span className="text-sm text-ink-900">{name}</span>
+        ) : (
+          <span className="text-ink-700">—</span>
+        );
+      },
+    },
+    {
+      key: "campaign",
+      header: "Campaign",
+      width: "1.4fr",
+      render: (r) => <CampaignPicker lead={r} campaigns={campaignOptions} />,
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "0.9fr",
+      sortable: true,
+      sortValue: (r) => r.status,
+      render: (r) => (
+        <span className="flex items-center gap-2">
+          <StatusDot kind={statusKind(r.status)} />
+          <span className="font-mono text-2xs uppercase tracking-widest text-ink-900">{r.status}</span>
+        </span>
+      ),
+    },
+    {
+      key: "attempts",
+      header: "Attempts",
+      width: "0.7fr",
+      sortable: true,
+      sortValue: (r) => r.attempts,
+      render: (r) => <span className="data-cell text-ink-900">{r.attempts}</span>,
+    },
+    {
+      key: "added",
+      header: "Added",
+      width: "1fr",
+      sortable: true,
+      sortValue: (r) => r.created_at,
+      render: (r) => (
+        <span className="font-mono text-2xs text-ink-700">
+          {r.created_at.slice(0, 19).replace("T", " ")}
+        </span>
+      ),
+    },
+  ];
 
   return (
     <div className="px-8 py-10 max-w-7xl">
@@ -54,61 +143,56 @@ export function LeadsPage() {
         actions={<Button onClick={() => setCreating(true)}>+ add lead</Button>}
       />
 
-      <div className="mt-6 flex items-baseline justify-between font-mono text-2xs uppercase tracking-widest text-ink-700">
+      <div className="mt-6 flex items-baseline font-mono text-2xs uppercase tracking-widest text-ink-700">
         <span>
           <span className="text-ink-950 tnum">{total}</span> total
-          {showing > 0 && <> · showing {offset + 1}–{offset + showing}</>}
         </span>
-        {total > PAGE && (
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setOffset(Math.max(0, offset - PAGE))}
-              disabled={offset === 0}
-              className="text-ink-700 hover:text-ink-950 disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              ← prev
-            </button>
-            <button
-              onClick={() => setOffset(offset + PAGE)}
-              disabled={offset + PAGE >= total}
-              className="text-ink-700 hover:text-ink-950 disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              next →
-            </button>
-          </div>
+      </div>
+
+      {list.error && (
+        <div className="mt-6">
+          <ErrorBanner>{(list.error as ApiError).message}</ErrorBanner>
+        </div>
+      )}
+
+      <div className="mt-6">
+        {list.data && rows.length === 0 ? (
+          <EmptyState
+            title="no leads yet"
+            body="Add by phone, or wait for the CSV upload UI. Numbers must be E.164: +1XXXXXXXXXX for US."
+            action={<Button onClick={() => setCreating(true)}>+ add lead</Button>}
+          />
+        ) : (
+          <Table<Lead>
+            columns={columns}
+            data={rows}
+            rowKey={(r) => r.id}
+            onRowClick={(r) => setOpenLeadId(r.id)}
+            loading={list.isLoading}
+            pagination={{
+              offset,
+              limit: PAGE,
+              total,
+              onChange: setOffset,
+            }}
+          />
         )}
       </div>
 
-      {list.error && <div className="mt-6"><ErrorBanner>{(list.error as ApiError).message}</ErrorBanner></div>}
+      <CreateModal
+        open={creating}
+        campaigns={campaignOptions}
+        onClose={() => setCreating(false)}
+        onCreated={() => list.refetch()}
+      />
 
-      {list.data && list.data.leads?.length ? (
-        <Table data={list.data.leads} campaigns={campaignOptions} onChanged={() => list.refetch()} />
-      ) : list.data ? (
-        <EmptyState
-          title="no leads yet"
-          body="Add by phone, or wait for the CSV upload UI in the next iteration. Numbers must be E.164: +1XXXXXXXXXX for US."
-          action={<Button onClick={() => setCreating(true)}>+ add lead</Button>}
-        />
-      ) : null}
-
-      <CreateModal open={creating} campaigns={campaignOptions} onClose={() => setCreating(false)} onCreated={() => list.refetch()} />
-    </div>
-  );
-}
-
-function Table({ data, campaigns, onChanged }: { data: Lead[]; campaigns: Campaign[]; onChanged: () => void }) {
-  return (
-    <div className="mt-6 surface overflow-hidden">
-      <div className="grid grid-cols-[1.6fr_1.6fr_1.6fr_1fr_0.8fr_1.2fr_8rem] gap-px bg-ink-400 border-b border-ink-400">
-        {["Phone", "Name", "Campaign", "Status", "Attempts", "Added", ""].map((h) => (
-          <div key={h} className="bg-ink-100 px-5 py-3 font-mono text-2xs uppercase tracking-widest text-ink-700">
-            {h}
-          </div>
-        ))}
-      </div>
-      {data.map((l, idx) => (
-        <Row key={l.id} l={l} campaigns={campaigns} odd={idx % 2 === 1} onChanged={onChanged} />
-      ))}
+      <LeadDetail
+        lead={openLead}
+        onClose={() => setOpenLeadId(null)}
+        onPrev={openLead && rows[0]?.id !== openLead.id ? () => step(-1) : undefined}
+        onNext={openLead && rows[rows.length - 1]?.id !== openLead.id ? () => step(1) : undefined}
+        onMutated={() => list.refetch()}
+      />
     </div>
   );
 }
@@ -122,7 +206,6 @@ function statusKind(s: string) {
       return "completed" as const;
     case "dnc":
     case "opt_out":
-      return "archived" as const;
     case "max_attempts":
     case "failed":
       return "archived" as const;
@@ -131,76 +214,47 @@ function statusKind(s: string) {
   }
 }
 
-function Row({ l, campaigns, odd, onChanged }: { l: Lead; campaigns: Campaign[]; odd: boolean; onChanged: () => void }) {
-  const del = useApiMutation<void, void>(`/tenant/leads/${l.id}`, "DELETE", {
-    invalidate: ["leads"],
-    onSuccess: () => onChanged(),
-  });
+function CampaignPicker({ lead, campaigns }: { lead: Lead; campaigns: Campaign[] }) {
   const patch = useApiMutation<Lead, { campaign_id: number | null }>(
-    `/tenant/leads/${l.id}`,
+    `/tenant/leads/${lead.id}`,
     "PATCH",
-    { invalidate: ["leads"], onSuccess: () => onChanged() },
+    {
+      invalidate: ["leads"],
+      onSuccess: () => toast.success("campaign updated"),
+      onError: (e) => toast.error("update failed", { description: e.message }),
+    },
   );
-  const redial = useApiMutation<Lead, void>(
-    `/tenant/leads/${l.id}/redial`,
-    "POST",
-    { invalidate: ["leads"], onSuccess: () => onChanged() },
-  );
-  const bg = odd ? "bg-ink-50" : "bg-ink-100";
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.18 }}
-      className="grid grid-cols-[1.6fr_1.6fr_1.6fr_1fr_0.8fr_1.2fr_8rem] gap-px bg-ink-400 border-b border-ink-400 last:border-b-0"
+    <select
+      value={lead.campaign_id ?? ""}
+      disabled={patch.isPending}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) =>
+        patch.mutate({ campaign_id: e.target.value === "" ? null : Number(e.target.value) })
+      }
+      className="w-full bg-transparent font-mono text-2xs uppercase tracking-widest text-ink-900 border border-ink-400 px-2 py-1.5 hover:border-ink-700 focus:outline-none focus:border-phosphor disabled:opacity-50"
     >
-      <div className={`${bg} px-5 py-4 data-cell text-ink-950`}>{l.phone_e164}</div>
-      <div className={`${bg} px-5 py-4 text-sm text-ink-900`}>
-        {[l.first_name, l.last_name].filter(Boolean).join(" ") || <span className="text-ink-700">—</span>}
-      </div>
-      <div className={`${bg} px-5 py-2 flex items-center`}>
-        <select
-          value={l.campaign_id ?? ""}
-          disabled={patch.isPending}
-          onChange={(e) => patch.mutate({ campaign_id: e.target.value === "" ? null : Number(e.target.value) })}
-          className="w-full bg-transparent font-mono text-2xs uppercase tracking-widest text-ink-900 border border-ink-400 rounded px-2 py-1.5 hover:border-ink-700 focus:outline-none focus:border-accent disabled:opacity-50"
-        >
-          <option value="">— none —</option>
-          {campaigns.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-      </div>
-      <div className={`${bg} px-5 py-4 flex items-center gap-2`}>
-        <StatusDot kind={statusKind(l.status)} />
-        <span className="font-mono text-2xs uppercase tracking-widest text-ink-900">{l.status}</span>
-      </div>
-      <div className={`${bg} px-5 py-4 data-cell text-ink-900`}>{l.attempts}</div>
-      <div className={`${bg} px-5 py-4 font-mono text-2xs text-ink-700`}>{l.created_at.slice(0, 19).replace("T", " ")}</div>
-      <div className={`${bg} flex items-center justify-end gap-3 pr-4`}>
-        <button
-          onClick={() => redial.mutate()}
-          disabled={redial.isPending}
-          title="reset status to new and zero attempts so the dialer will call again"
-          className="font-mono text-2xs uppercase tracking-widest text-ink-700 hover:text-accent disabled:opacity-50"
-        >
-          {redial.isPending ? "..." : "redial"}
-        </button>
-        <button
-          onClick={() => {
-            if (confirm(`delete lead ${l.phone_e164}?`)) del.mutate();
-          }}
-          disabled={del.isPending}
-          className="font-mono text-2xs uppercase tracking-widest text-ink-700 hover:text-danger disabled:opacity-50"
-        >
-          delete
-        </button>
-      </div>
-    </motion.div>
+      <option value="">— none —</option>
+      {campaigns.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.name}
+        </option>
+      ))}
+    </select>
   );
 }
 
-function CreateModal({ open, campaigns, onClose, onCreated }: { open: boolean; campaigns: Campaign[]; onClose: () => void; onCreated: () => void }) {
+function CreateModal({
+  open,
+  campaigns,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  campaigns: Campaign[];
+  onClose: () => void;
+  onCreated: () => void;
+}) {
   const [phone, setPhone] = useState("");
   const [dialDest, setDialDest] = useState("");
   const phoneOptional = dialDest.trim() !== "";
@@ -211,20 +265,27 @@ function CreateModal({ open, campaigns, onClose, onCreated }: { open: boolean; c
 
   const create = useApiMutation<
     Lead,
-    { phone_e164: string; dial_destination?: string; first_name?: string; last_name?: string; campaign_id?: number }
+    {
+      phone_e164: string;
+      dial_destination?: string;
+      first_name?: string;
+      last_name?: string;
+      campaign_id?: number;
+    }
   >("/tenant/leads/", "POST", { invalidate: ["leads"] });
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setErr(null);
     try {
-      await create.mutateAsync({
+      const created = await create.mutateAsync({
         phone_e164: phone,
         dial_destination: dialDest || undefined,
         first_name: firstName || undefined,
         last_name: lastName || undefined,
         campaign_id: campaignId === "" ? undefined : Number(campaignId),
       });
+      toast.success("lead added", { description: created.phone_e164 });
       setPhone("");
       setDialDest("");
       setFirstName("");
@@ -244,11 +305,14 @@ function CreateModal({ open, campaigns, onClose, onCreated }: { open: boolean; c
           <Label
             hint={
               phoneOptional
-                ? "optional when dial destination is set · a placeholder is recorded for audit"
-                : "E.164 format · US: +1XXXXXXXXXX · the compliance/audit identifier"
+                ? "optional when dial destination is set"
+                : "E.164 format · US: +1XXXXXXXXXX · compliance identifier"
             }
           >
-            Phone {phoneOptional && <span className="text-ink-700 font-mono text-2xs normal-case tracking-normal">(optional)</span>}
+            Phone{" "}
+            {phoneOptional && (
+              <span className="text-ink-700 font-mono text-2xs normal-case tracking-normal">(optional)</span>
+            )}
           </Label>
           <Input
             value={phone}
@@ -270,18 +334,26 @@ function CreateModal({ open, campaigns, onClose, onCreated }: { open: boolean; c
           />
         </div>
         <div>
-          <Label hint={campaigns.length === 0 ? "no campaigns yet — create one first" : "attach to a campaign so the dialer can pick this lead up"}>
+          <Label
+            hint={
+              campaigns.length === 0
+                ? "no campaigns yet — create one first"
+                : "attach to a campaign so the dialer can pick this up"
+            }
+          >
             Campaign
           </Label>
           <select
             value={campaignId}
             onChange={(e) => setCampaignId(e.target.value)}
             disabled={campaigns.length === 0}
-            className="w-full bg-ink-50 font-mono text-sm text-ink-950 border border-ink-400 rounded px-3 py-2 hover:border-ink-700 focus:outline-none focus:border-accent disabled:opacity-50"
+            className="w-full bg-ink-50 font-mono text-sm text-ink-950 border border-ink-400 px-3 py-2 hover:border-ink-700 focus:outline-none focus:border-phosphor disabled:opacity-50"
           >
             <option value="">— none —</option>
             {campaigns.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
           </select>
         </div>
@@ -297,7 +369,9 @@ function CreateModal({ open, campaigns, onClose, onCreated }: { open: boolean; c
         </div>
         {err && <ErrorBanner>{err}</ErrorBanner>}
         <div className="flex items-center justify-end gap-3 border-t border-ink-400 pt-5">
-          <Button type="button" variant="ghost" onClick={onClose}>cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            cancel
+          </Button>
           <Button type="submit" disabled={create.isPending}>
             {create.isPending ? "adding..." : "add"}
           </Button>

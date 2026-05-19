@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { Brand } from "@/components/brand";
+import { ToastViewport } from "@/components/toast";
 
 interface NavItem {
   label: string;
@@ -86,6 +87,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="relative">{children}</div>
         </main>
       </div>
+      <ToastViewport />
     </div>
   );
 }

@@ -1,8 +1,18 @@
 import { useState, type FormEvent } from "react";
-import { motion } from "motion/react";
 import { useApiMutation, useApiQuery } from "@/lib/hooks";
-import { Button, EmptyState, ErrorBanner, Input, Label, Modal, PageHeader, StatusDot } from "@/components/ui";
+import {
+  Button,
+  EmptyState,
+  ErrorBanner,
+  Input,
+  Label,
+  Modal,
+  PageHeader,
+  StatusDot,
+} from "@/components/ui";
+import { Table, type Column } from "@/components/table";
 import { ApiError } from "@/lib/api";
+import { toast } from "@/lib/toast";
 
 interface Campaign {
   id: number;
@@ -20,9 +30,84 @@ interface ListResp {
   campaigns: Campaign[];
 }
 
+function statusKind(s: Campaign["status"]) {
+  if (s === "active") return "live" as const;
+  if (s === "paused") return "paused" as const;
+  if (s === "completed") return "completed" as const;
+  return "archived" as const;
+}
+
 export function CampaignsPage() {
   const list = useApiQuery<ListResp>(["campaigns"], "/tenant/campaigns/");
   const [creating, setCreating] = useState(false);
+
+  const campaigns = list.data?.campaigns ?? [];
+
+  const columns: Column<Campaign>[] = [
+    {
+      key: "name",
+      header: "Campaign",
+      width: "2.4fr",
+      sortable: true,
+      sortValue: (c) => c.name,
+      render: (c) => (
+        <div className="flex items-center gap-3 min-w-0">
+          <StatusDot kind={statusKind(c.status)} />
+          <div className="min-w-0">
+            <p className="text-ink-950 text-sm truncate">{c.name}</p>
+            <p className="font-mono text-2xs text-ink-700 mt-0.5 tnum">
+              #{c.id} · {c.status}
+            </p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "mode",
+      header: "Mode",
+      width: "0.9fr",
+      sortable: true,
+      sortValue: (c) => c.mode,
+      render: (c) => (
+        <span className="font-mono text-2xs uppercase tracking-widest text-ink-900">{c.mode}</span>
+      ),
+    },
+    {
+      key: "ratio",
+      header: "Dial ratio",
+      width: "0.8fr",
+      sortable: true,
+      sortValue: (c) => c.dial_ratio,
+      align: "right",
+      render: (c) => <span className="data-cell text-ink-900">{c.dial_ratio.toFixed(2)}×</span>,
+    },
+    {
+      key: "abandon",
+      header: "Abandon ≤",
+      width: "0.8fr",
+      align: "right",
+      render: (c) => <span className="data-cell text-ink-900">{c.max_abandon_pct.toFixed(2)}%</span>,
+    },
+    {
+      key: "updated",
+      header: "Updated",
+      width: "1.1fr",
+      sortable: true,
+      sortValue: (c) => c.updated_at,
+      render: (c) => (
+        <span className="font-mono text-2xs text-ink-700">
+          {c.updated_at.slice(0, 19).replace("T", " ")}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "9rem",
+      align: "right",
+      render: (c) => <StartStop campaign={c} onChanged={() => list.refetch()} />,
+    },
+  ];
 
   return (
     <div className="px-8 py-10 max-w-7xl">
@@ -33,119 +118,73 @@ export function CampaignsPage() {
         actions={<Button onClick={() => setCreating(true)}>+ new campaign</Button>}
       />
 
-      {list.isLoading && <Skeleton />}
-      {list.error && <div className="mt-6"><ErrorBanner>{(list.error as ApiError).message}</ErrorBanner></div>}
+      {list.error && (
+        <div className="mt-6">
+          <ErrorBanner>{(list.error as ApiError).message}</ErrorBanner>
+        </div>
+      )}
 
-      {list.data && list.data.campaigns?.length ? (
-        <Table data={list.data.campaigns} onChanged={() => list.refetch()} />
-      ) : list.data ? (
-        <EmptyState
-          title="no campaigns yet"
-          body="Spin one up. Pick a mode, point it at a DID pool, drop in leads, set the script. Nothing dials until you flip status to active."
-          action={<Button onClick={() => setCreating(true)}>+ new campaign</Button>}
-        />
-      ) : null}
-
-      <CreateModal open={creating} onClose={() => setCreating(false)} onCreated={() => list.refetch()} />
-    </div>
-  );
-}
-
-function Skeleton() {
-  return (
-    <div className="surface mt-8 p-6 space-y-2 animate-pulse">
-      <div className="h-3 w-1/4 bg-ink-300" />
-      <div className="h-3 w-2/3 bg-ink-300" />
-      <div className="h-3 w-1/2 bg-ink-300" />
-    </div>
-  );
-}
-
-function Table({ data, onChanged }: { data: Campaign[]; onChanged: () => void }) {
-  return (
-    <div className="mt-8 surface overflow-hidden">
-      <div className="grid grid-cols-[3fr_1fr_1fr_1fr_1.2fr_8rem] gap-px bg-ink-400 border-b border-ink-400">
-        {["Name", "Mode", "Ratio", "Abandon ≤", "Updated", ""].map((h) => (
-          <div key={h} className="bg-ink-100 px-5 py-3 font-mono text-2xs uppercase tracking-widest text-ink-700">
-            {h}
-          </div>
-        ))}
+      <div className="mt-8">
+        {list.data && campaigns.length === 0 ? (
+          <EmptyState
+            title="no campaigns yet"
+            body="Spin one up. Pick a mode, point it at a DID pool, drop in leads, set the script. Nothing dials until you flip status to active."
+            action={<Button onClick={() => setCreating(true)}>+ new campaign</Button>}
+          />
+        ) : (
+          <Table<Campaign>
+            columns={columns}
+            data={campaigns}
+            rowKey={(c) => c.id}
+            loading={list.isLoading}
+          />
+        )}
       </div>
-      {data.map((c, idx) => (
-        <Row key={c.id} c={c} odd={idx % 2 === 1} onChanged={onChanged} />
-      ))}
+
+      <CreateModal
+        open={creating}
+        onClose={() => setCreating(false)}
+        onCreated={() => list.refetch()}
+      />
     </div>
   );
 }
 
-function Row({ c, odd, onChanged }: { c: Campaign; odd: boolean; onChanged: () => void }) {
-  const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const toggle = useApiMutation<Campaign, { status: string }>(`/tenant/campaigns/${c.id}`, "PATCH", {
+function StartStop({ campaign, onChanged }: { campaign: Campaign; onChanged: () => void }) {
+  const isLive = campaign.status === "active";
+  const next = isLive ? "paused" : "active";
+  const toggle = useApiMutation<Campaign, { status: string }>(`/tenant/campaigns/${campaign.id}`, "PATCH", {
     invalidate: ["campaigns"],
     onSuccess: () => {
-      setOptimisticStatus(null);
-      setError(null);
+      toast.success(isLive ? "paused" : "live", { description: campaign.name });
       onChanged();
     },
-    onError: (e) => {
-      setOptimisticStatus(null);
-      setError(e instanceof ApiError ? e.message : "toggle failed");
-    },
+    onError: (e) => toast.error("toggle failed", { description: e.message }),
   });
 
-  const effectiveStatus = optimisticStatus ?? c.status;
-  const isLive = effectiveStatus === "active";
-  const next = isLive ? "paused" : "active";
-
-  function onClick() {
-    setOptimisticStatus(next);
-    setError(null);
-    toggle.mutate({ status: next });
-  }
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-      className={`grid grid-cols-[3fr_1fr_1fr_1fr_1.2fr_8rem] gap-px bg-ink-400 border-b border-ink-400 last:border-b-0 ${
-        odd ? "" : ""
-      }`}
+    <Button
+      variant={isLive ? "danger" : "primary"}
+      onClick={() => toggle.mutate({ status: next })}
+      disabled={toggle.isPending}
+      className="h-7 px-3"
     >
-      <div className={`px-5 py-4 ${odd ? "bg-ink-50" : "bg-ink-100"} flex items-center gap-3`}>
-        <StatusDot kind={effectiveStatus === "active" ? "live" : effectiveStatus === "paused" ? "paused" : effectiveStatus === "completed" ? "completed" : "archived"} />
-        <div>
-          <p className="text-ink-950 text-sm">{c.name}</p>
-          <p className="font-mono text-2xs text-ink-700 mt-0.5">
-            #{c.id} · {effectiveStatus}
-            {optimisticStatus && <span className="text-amber"> · saving</span>}
-            {error && <span className="text-danger"> · {error}</span>}
-          </p>
-        </div>
-      </div>
-      <div className={`px-5 py-4 ${odd ? "bg-ink-50" : "bg-ink-100"} font-mono text-sm text-ink-900 uppercase`}>{c.mode}</div>
-      <div className={`px-5 py-4 ${odd ? "bg-ink-50" : "bg-ink-100"} data-cell text-ink-900`}>{c.dial_ratio.toFixed(2)}×</div>
-      <div className={`px-5 py-4 ${odd ? "bg-ink-50" : "bg-ink-100"} data-cell text-ink-900`}>{c.max_abandon_pct.toFixed(2)}%</div>
-      <div className={`px-5 py-4 ${odd ? "bg-ink-50" : "bg-ink-100"} font-mono text-2xs text-ink-700`}>{c.updated_at.slice(0, 19).replace("T", " ")}</div>
-      <div className={`${odd ? "bg-ink-50" : "bg-ink-100"} flex items-center justify-end pr-4`}>
-        <Button
-          variant={isLive ? "danger" : "primary"}
-          onClick={onClick}
-          disabled={toggle.isPending}
-          className="h-7 px-3"
-        >
-          {toggle.isPending ? "..." : isLive ? "pause" : "go live"}
-        </Button>
-      </div>
-    </motion.div>
+      {toggle.isPending ? "..." : isLive ? "pause" : "go live"}
+    </Button>
   );
 }
 
 const modes = ["press1", "broadcast", "predictive", "preview"] as const;
 
-function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+function CreateModal({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
   const [name, setName] = useState("");
   const [mode, setMode] = useState<(typeof modes)[number]>("press1");
   const [dialRatio, setDialRatio] = useState("1.0");
@@ -161,7 +200,8 @@ function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
     e.preventDefault();
     setErr(null);
     try {
-      await create.mutateAsync({ name, mode, dial_ratio: parseFloat(dialRatio) || 1.0 });
+      const created = await create.mutateAsync({ name, mode, dial_ratio: parseFloat(dialRatio) || 1.0 });
+      toast.success("campaign created", { description: `${created.name} · paused` });
       setName("");
       setMode("press1");
       setDialRatio("1.0");
@@ -177,7 +217,12 @@ function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
       <form onSubmit={submit} className="space-y-6">
         <div>
           <Label hint="must be unique within tenant">Name</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="spring-broadcast-q2" />
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            placeholder="spring-broadcast-q2"
+          />
         </div>
         <div>
           <Label hint="press-1 needs agents; broadcast doesn't">Mode</Label>
@@ -188,7 +233,9 @@ function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
                 key={m}
                 onClick={() => setMode(m)}
                 className={`px-3 h-10 font-mono text-2xs uppercase tracking-widest transition-colors ${
-                  mode === m ? "bg-phosphor text-ink-0" : "bg-ink-100 text-ink-800 hover:bg-ink-200 hover:text-ink-950"
+                  mode === m
+                    ? "bg-phosphor text-ink-0"
+                    : "bg-ink-100 text-ink-800 hover:bg-ink-200 hover:text-ink-950"
                 }`}
               >
                 {m}
@@ -210,7 +257,9 @@ function CreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
         </div>
         {err && <ErrorBanner>{err}</ErrorBanner>}
         <div className="flex items-center justify-end gap-3 border-t border-ink-400 pt-5">
-          <Button type="button" variant="ghost" onClick={onClose}>cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            cancel
+          </Button>
           <Button type="submit" disabled={create.isPending}>
             {create.isPending ? "creating..." : "create paused"}
           </Button>

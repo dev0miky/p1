@@ -2,7 +2,9 @@ import { useState, type FormEvent } from "react";
 import { useApiMutation, useApiQuery } from "@/lib/hooks";
 import { useAuth } from "@/lib/auth";
 import { Button, EmptyState, ErrorBanner, Input, Label, Modal, PageHeader } from "@/components/ui";
+import { Table, type Column } from "@/components/table";
 import { ApiError, api } from "@/lib/api";
+import { toast } from "@/lib/toast";
 
 interface Entry {
   id: number;
@@ -52,17 +54,23 @@ export function DNCPage() {
         />
       </div>
 
-      {list.error && <div className="mt-6"><ErrorBanner>{(list.error as ApiError).message}</ErrorBanner></div>}
+      {list.error && (
+        <div className="mt-6">
+          <ErrorBanner>{(list.error as ApiError).message}</ErrorBanner>
+        </div>
+      )}
 
-      {list.data && list.data.entries?.length ? (
-        <Table data={list.data.entries} onChanged={() => list.refetch()} />
-      ) : list.data ? (
-        <EmptyState
-          title={search ? "no matches" : "nothing on internal DNC"}
-          body="Add a number when a customer opts out by voice, email, web form, or DTMF press-9. The dialer checks here before every originate."
-          action={!search ? <Button onClick={() => setAdding(true)}>+ add first number</Button> : undefined}
-        />
-      ) : null}
+      <div className="mt-6">
+        {list.data && (list.data.entries?.length ?? 0) === 0 ? (
+          <EmptyState
+            title={search ? "no matches" : "nothing on internal DNC"}
+            body="Add a number when a customer opts out by voice, email, web form, or DTMF press-9. The dialer checks here before every originate."
+            action={!search ? <Button onClick={() => setAdding(true)}>+ add first number</Button> : undefined}
+          />
+        ) : (
+          <DNCTable entries={list.data?.entries ?? []} loading={list.isLoading} onChanged={() => list.refetch()} />
+        )}
+      </div>
 
       <AddModal open={adding} onClose={() => setAdding(false)} onCreated={() => list.refetch()} />
       <CheckModal open={checkOpen} onClose={() => setCheckOpen(false)} />
@@ -70,47 +78,80 @@ export function DNCPage() {
   );
 }
 
-function Table({ data, onChanged }: { data: Entry[]; onChanged: () => void }) {
-  return (
-    <div className="mt-6 surface overflow-hidden">
-      <div className="grid grid-cols-[2fr_1fr_3fr_1.5fr_5rem] gap-px bg-ink-400 border-b border-ink-400">
-        {["Phone", "Scope", "Reason", "Added", ""].map((h) => (
-          <div key={h} className="bg-ink-100 px-5 py-3 font-mono text-2xs uppercase tracking-widest text-ink-700">
-            {h}
-          </div>
-        ))}
-      </div>
-      {data.map((e, idx) => (
-        <Row key={e.id} e={e} odd={idx % 2 === 1} onChanged={onChanged} />
-      ))}
-    </div>
-  );
+function DNCTable({ entries, loading, onChanged }: { entries: Entry[]; loading: boolean; onChanged: () => void }) {
+  const columns: Column<Entry>[] = [
+    {
+      key: "phone",
+      header: "Phone",
+      width: "1.6fr",
+      sortable: true,
+      sortValue: (e) => e.phone_e164,
+      render: (e) => <span className="data-cell text-ink-950">{e.phone_e164}</span>,
+    },
+    {
+      key: "scope",
+      header: "Scope",
+      width: "0.8fr",
+      sortable: true,
+      sortValue: (e) => e.scope,
+      render: (e) => (
+        <span className="font-mono text-2xs uppercase tracking-widest text-ink-900">{e.scope}</span>
+      ),
+    },
+    {
+      key: "reason",
+      header: "Reason",
+      width: "2.4fr",
+      render: (e) =>
+        e.reason ? (
+          <span className="text-sm text-ink-900">{e.reason}</span>
+        ) : (
+          <span className="text-ink-700">—</span>
+        ),
+    },
+    {
+      key: "added",
+      header: "Added",
+      width: "1.2fr",
+      sortable: true,
+      sortValue: (e) => e.added_at,
+      render: (e) => (
+        <span className="font-mono text-2xs text-ink-700">
+          {e.added_at.slice(0, 19).replace("T", " ")}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "6rem",
+      align: "right",
+      render: (e) => <RemoveBtn entry={e} onChanged={onChanged} />,
+    },
+  ];
+
+  return <Table<Entry> columns={columns} data={entries} rowKey={(e) => e.id} loading={loading} />;
 }
 
-function Row({ e, odd, onChanged }: { e: Entry; odd: boolean; onChanged: () => void }) {
-  const del = useApiMutation<void, void>(`/tenant/dnc/${encodeURIComponent(e.phone_e164)}`, "DELETE", {
+function RemoveBtn({ entry, onChanged }: { entry: Entry; onChanged: () => void }) {
+  const del = useApiMutation<void, void>(`/tenant/dnc/${encodeURIComponent(entry.phone_e164)}`, "DELETE", {
     invalidate: ["dnc"],
-    onSuccess: () => onChanged(),
+    onSuccess: () => {
+      toast.success("removed from DNC", { description: entry.phone_e164 });
+      onChanged();
+    },
+    onError: (e) => toast.error("remove failed", { description: e.message }),
   });
-  const bg = odd ? "bg-ink-50" : "bg-ink-100";
   return (
-    <div className="grid grid-cols-[2fr_1fr_3fr_1.5fr_5rem] gap-px bg-ink-400 border-b border-ink-400 last:border-b-0">
-      <div className={`${bg} px-5 py-4 data-cell text-ink-950`}>{e.phone_e164}</div>
-      <div className={`${bg} px-5 py-4 font-mono text-2xs uppercase tracking-widest text-ink-900`}>{e.scope}</div>
-      <div className={`${bg} px-5 py-4 text-sm text-ink-900`}>{e.reason || <span className="text-ink-700">—</span>}</div>
-      <div className={`${bg} px-5 py-4 font-mono text-2xs text-ink-700`}>{e.added_at.slice(0, 19).replace("T", " ")}</div>
-      <div className={`${bg} flex items-center justify-end pr-4`}>
-        <button
-          onClick={() => {
-            if (confirm(`remove ${e.phone_e164} from DNC?`)) del.mutate();
-          }}
-          disabled={del.isPending}
-          className="font-mono text-2xs uppercase tracking-widest text-ink-700 hover:text-danger disabled:opacity-50"
-        >
-          remove
-        </button>
-      </div>
-    </div>
+    <button
+      onClick={() => {
+        if (confirm(`remove ${entry.phone_e164} from DNC?`)) del.mutate();
+      }}
+      disabled={del.isPending}
+      className="font-mono text-2xs uppercase tracking-widest text-ink-700 hover:text-danger disabled:opacity-50"
+    >
+      remove
+    </button>
   );
 }
 
@@ -127,7 +168,8 @@ function AddModal({ open, onClose, onCreated }: { open: boolean; onClose: () => 
     e.preventDefault();
     setErr(null);
     try {
-      await add.mutateAsync({ phone_e164: phone, reason: reason || undefined });
+      const created = await add.mutateAsync({ phone_e164: phone, reason: reason || undefined });
+      toast.success("added to DNC", { description: created.phone_e164 });
       setPhone("+1");
       setReason("");
       onCreated();
