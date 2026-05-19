@@ -1,13 +1,17 @@
 package main
 
 import (
-	"log"
+	"log/slog"
+	"os"
 	"time"
 )
 
 func main() {
-	log.Println("dnc-sync placeholder up")
-	for {
-		time.Sleep(time.Hour)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger.Warn("placeholder — not wired yet", "service", "dnc-sync")
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for range t.C {
+		logger.Warn("placeholder — not wired yet", "service", "dnc-sync")
 	}
 }

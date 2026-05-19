@@ -1,13 +1,17 @@
 package main
 
 import (
-	"log"
+	"log/slog"
+	"os"
 	"time"
 )
 
 func main() {
-	log.Println("recording-uploader placeholder up")
-	for {
-		time.Sleep(time.Minute)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger.Warn("placeholder — not wired yet", "service", "recording-uploader")
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for range t.C {
+		logger.Warn("placeholder — not wired yet", "service", "recording-uploader")
 	}
 }
