@@ -14,6 +14,7 @@ import (
 	"p1/engine/internal/dnc"
 	"p1/engine/internal/fsm"
 	"p1/engine/internal/lead"
+	"p1/engine/internal/leadimport"
 	"p1/engine/internal/script"
 	"p1/engine/internal/sound"
 	"p1/engine/internal/tenant"
@@ -25,6 +26,8 @@ type Config struct {
 	Logger         *slog.Logger
 	AllowedOrigins []string
 	SoundStorage   *sound.Storage
+	ImportStorage  *leadimport.Storage
+	ImportRunner   *leadimport.Runner
 }
 
 func NewRouter(cfg Config) http.Handler {
@@ -150,6 +153,13 @@ func NewRouter(cfg Config) http.Handler {
 	})
 
 	tenLL := &tenantLeadLists{repo: cfg.Repo, lRepo: lRepo}
+	tenIm := &tenantImports{
+		repo:    cfg.Repo,
+		lRepo:   lRepo,
+		iRepo:   leadimport.NewRepo(),
+		storage: cfg.ImportStorage,
+		runner:  cfg.ImportRunner,
+	}
 	r.Route("/tenant/lists", func(r chi.Router) {
 		r.Use(auth.RequireAuth(cfg.Issuer))
 		r.Use(auth.RequireTenant)
@@ -159,6 +169,16 @@ func NewRouter(cfg Config) http.Handler {
 		r.Get("/{id}", tenLL.get)
 		r.Patch("/{id}", tenLL.update)
 		r.Delete("/{id}", tenLL.delete)
+		r.Post("/{id}/import", tenIm.upload)
+	})
+
+	r.Route("/tenant/lead-import-jobs", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireTenant)
+		r.Use(auth.RequireAction(auth.ActionManageLeads))
+		r.Get("/", tenIm.list)
+		r.Get("/{id}", tenIm.get)
+		r.Post("/{id}/abort", tenIm.abort)
 	})
 
 	tenScripts := &tenantScripts{repo: cfg.Repo, sRepo: script.NewRepo()}

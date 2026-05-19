@@ -17,6 +17,7 @@ import (
 	"p1/engine/internal/auth"
 	"p1/engine/internal/config"
 	"p1/engine/internal/db"
+	"p1/engine/internal/leadimport"
 	"p1/engine/internal/sound"
 	"p1/engine/internal/tenant"
 	"p1/engine/migrations"
@@ -78,12 +79,24 @@ func serve(cfg config.Config, logger *slog.Logger) error {
 		return fmt.Errorf("sound storage init: %w", err)
 	}
 
+	importDir := os.Getenv("IMPORT_STORAGE_DIR")
+	if importDir == "" {
+		importDir = "/data/imports"
+	}
+	importStorage, err := leadimport.NewStorage(importDir)
+	if err != nil {
+		return fmt.Errorf("import storage init: %w", err)
+	}
+	importRunner := leadimport.NewRunner(pool, importStorage, logger)
+
 	handler := api.NewRouter(api.Config{
 		Repo:           repo,
 		Issuer:         iss,
 		Logger:         logger,
 		AllowedOrigins: cfg.AllowedOrigins,
 		SoundStorage:   soundStorage,
+		ImportStorage:  importStorage,
+		ImportRunner:   importRunner,
 	})
 
 	srv := &http.Server{
