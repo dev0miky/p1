@@ -3,6 +3,9 @@ import { Shell } from "@/components/layout/shell";
 import { Dashboard } from "@/pages/dashboard";
 import { CampaignsPage } from "@/pages/campaigns";
 import { CampaignDetailPage } from "@/pages/campaign-detail";
+import { SoundsPage } from "@/pages/sounds";
+import { ScriptsPage } from "@/pages/scripts";
+import { ListsPage } from "@/pages/lists";
 import { LeadsPage } from "@/pages/leads";
 import { DNCPage } from "@/pages/dnc";
 import { AdminTenantsPage } from "@/pages/admin-tenants";
@@ -46,6 +49,24 @@ const dncRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/dnc",
   component: DNCPage,
+});
+
+const soundsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/sounds",
+  component: SoundsPage,
+});
+
+const scriptsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/scripts",
+  component: ScriptsPage,
+});
+
+const listsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/lists",
+  component: ListsPage,
 });
 
 const reportsRoute = createRoute({
@@ -101,6 +122,9 @@ const routeTree = rootRoute.addChildren([
   campaignsRoute,
   campaignDetailRoute,
   leadsRoute,
+  listsRoute,
+  soundsRoute,
+  scriptsRoute,
   dncRoute,
   reportsRoute,
   agentsRoute,

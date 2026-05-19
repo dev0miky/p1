@@ -13,6 +13,7 @@ volumes:
   prometheusdata:
   grafanadata:
   lokidata:
+  sounds-data:
 
 services:
   postgres:
@@ -234,7 +235,10 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET_RECORDINGS: ${MINIO_BUCKET_RECORDINGS}
+      SOUND_STORAGE_DIR: /data/sounds
       LOG_LEVEL: ${LOG_LEVEL}
+    volumes:
+      - sounds-data:/data/sounds
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks: [app]

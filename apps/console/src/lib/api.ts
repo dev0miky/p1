@@ -39,6 +39,27 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
   return parsed as T;
 }
 
+export async function apiUpload<T = unknown>(
+  path: string,
+  formData: FormData,
+  opts: { token?: string | null; signal?: AbortSignal } = {},
+): Promise<T> {
+  const url = new URL(path, apiBase);
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers,
+    body: formData,
+    signal: opts.signal,
+  });
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  const parsed = text ? safeJSON(text) : undefined;
+  if (!res.ok) throw new ApiError(res.status, parsed, errorMessage(parsed));
+  return parsed as T;
+}
+
 function safeJSON(s: string): unknown {
   try {
     return JSON.parse(s);

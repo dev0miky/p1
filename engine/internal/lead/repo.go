@@ -246,6 +246,75 @@ func (r *Repo) CreateListTx(ctx context.Context, tx pgx.Tx, l List) (List, error
 	return out, scanList(row, &out)
 }
 
+type ListWithCount struct {
+	List
+	LeadCount int
+}
+
+func (r *Repo) GetListTx(ctx context.Context, tx pgx.Tx, id int64) (List, error) {
+	var out List
+	row := tx.QueryRow(ctx, `SELECT `+listFields+` FROM lead_lists WHERE id = $1`, id)
+	err := scanList(row, &out)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return out, ErrNotFound
+	}
+	return out, err
+}
+
+func (r *Repo) UpdateListTx(ctx context.Context, tx pgx.Tx, id int64, name, source string) (List, error) {
+	var out List
+	var srcPtr *string
+	if source != "" {
+		srcPtr = &source
+	}
+	row := tx.QueryRow(ctx, `
+		UPDATE lead_lists SET
+		  name       = COALESCE(NULLIF($1, ''), name),
+		  source     = COALESCE($2, source),
+		  updated_at = now()
+		WHERE id = $3
+		RETURNING `+listFields, name, srcPtr, id)
+	err := scanList(row, &out)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return out, ErrNotFound
+	}
+	return out, err
+}
+
+func (r *Repo) DeleteListTx(ctx context.Context, tx pgx.Tx, id int64) error {
+	tag, err := tx.Exec(ctx, `DELETE FROM lead_lists WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *Repo) ListListsWithCountsTx(ctx context.Context, tx pgx.Tx) ([]ListWithCount, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT ll.id, ll.tenant_id, ll.name, ll.source, ll.created_at, ll.updated_at,
+		       COALESCE(c.lead_count, 0)
+		FROM lead_lists ll
+		LEFT JOIN LATERAL (SELECT COUNT(*)::int AS lead_count FROM leads WHERE list_id = ll.id) c ON true
+		ORDER BY ll.id DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ListWithCount
+	for rows.Next() {
+		var l ListWithCount
+		if err := rows.Scan(&l.ID, &l.TenantID, &l.Name, &l.Source, &l.CreatedAt, &l.UpdatedAt, &l.LeadCount); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repo) ListListsTx(ctx context.Context, tx pgx.Tx) ([]List, error) {
 	rows, err := tx.Query(ctx, `SELECT `+listFields+` FROM lead_lists ORDER BY id`)
 	if err != nil {
