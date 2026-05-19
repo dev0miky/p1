@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useApiMutation, useApiQuery } from "@/lib/hooks";
 import {
   Button,
@@ -40,6 +41,7 @@ function statusKind(s: Campaign["status"]) {
 export function CampaignsPage() {
   const list = useApiQuery<ListResp>(["campaigns"], "/tenant/campaigns/");
   const [creating, setCreating] = useState(false);
+  const navigate = useNavigate();
 
   const campaigns = list.data?.campaigns ?? [];
 
@@ -137,6 +139,7 @@ export function CampaignsPage() {
             data={campaigns}
             rowKey={(c) => c.id}
             loading={list.isLoading}
+            onRowClick={(c) => navigate({ to: "/campaigns/$campaignId", params: { campaignId: String(c.id) } })}
           />
         )}
       </div>
@@ -165,7 +168,10 @@ function StartStop({ campaign, onChanged }: { campaign: Campaign; onChanged: () 
   return (
     <Button
       variant={isLive ? "danger" : "primary"}
-      onClick={() => toggle.mutate({ status: next })}
+      onClick={(e) => {
+        e.stopPropagation();
+        toggle.mutate({ status: next });
+      }}
       disabled={toggle.isPending}
       className="h-7 px-3"
     >
