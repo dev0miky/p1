@@ -1,6 +1,7 @@
 package esl
 
 import (
+	"net/textproto"
 	"net/url"
 	"strings"
 )
@@ -19,25 +20,25 @@ func (e Event) Get(k string) string {
 	if e.headers == nil {
 		return ""
 	}
-	return e.headers[k]
+	return e.headers[textproto.CanonicalMIMEHeaderKey(k)]
 }
 
 func ParseEvent(raw map[string]string) Event {
 	decoded := make(map[string]string, len(raw))
 	for k, v := range raw {
+		val := v
 		if dec, err := url.QueryUnescape(v); err == nil {
-			decoded[k] = dec
-		} else {
-			decoded[k] = v
+			val = dec
 		}
+		decoded[textproto.CanonicalMIMEHeaderKey(k)] = val
 	}
 	return Event{
 		Name:        decoded["Event-Name"],
-		UniqueID:    decoded["Unique-ID"],
-		CallerNum:   decoded["Caller-Caller-ID-Number"],
+		UniqueID:    decoded["Unique-Id"],
+		CallerNum:   decoded["Caller-Caller-Id-Number"],
 		CalledNum:   decoded["Caller-Destination-Number"],
 		HangupCause: decoded["Hangup-Cause"],
-		JobUUID:     decoded["Job-UUID"],
+		JobUUID:     decoded["Job-Uuid"],
 		headers:     decoded,
 	}
 }

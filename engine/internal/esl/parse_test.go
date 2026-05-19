@@ -24,6 +24,33 @@ func TestParseEventDecodesURLEncoding(t *testing.T) {
 	}
 }
 
+func TestParseEventHandlesCanonicalMIMEHeaderKeys(t *testing.T) {
+	// eslgo delivers headers via textproto.MIMEHeader which canonicalizes
+	// keys: Unique-ID -> Unique-Id, Job-UUID -> Job-Uuid,
+	// Caller-Caller-ID-Number -> Caller-Caller-Id-Number.
+	raw := map[string]string{
+		"Event-Name":                "CHANNEL_ANSWER",
+		"Unique-Id":                 "abc-canonical",
+		"Caller-Caller-Id-Number":   "%2B15551234567",
+		"Caller-Destination-Number": "%2B15559998888",
+		"Job-Uuid":                  "job-canonical",
+		"Hangup-Cause":              "NORMAL_CLEARING",
+	}
+	e := ParseEvent(raw)
+	if e.UniqueID != "abc-canonical" {
+		t.Errorf("uuid: %q", e.UniqueID)
+	}
+	if e.CallerNum != "+15551234567" {
+		t.Errorf("caller: %q", e.CallerNum)
+	}
+	if e.JobUUID != "job-canonical" {
+		t.Errorf("job: %q", e.JobUUID)
+	}
+	if e.HangupCause != "NORMAL_CLEARING" {
+		t.Errorf("cause: %q", e.HangupCause)
+	}
+}
+
 func TestEventGetReturnsRawHeader(t *testing.T) {
 	raw := map[string]string{
 		"Event-Name":         "CUSTOM",
