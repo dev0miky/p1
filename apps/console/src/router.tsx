@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/re
 import { Shell } from "@/components/layout/shell";
 import { Dashboard } from "@/pages/dashboard";
 import { CampaignsPage } from "@/pages/campaigns";
+import { CampaignDetailPage } from "@/pages/campaign-detail";
 import { LeadsPage } from "@/pages/leads";
 import { DNCPage } from "@/pages/dnc";
 import { AdminTenantsPage } from "@/pages/admin-tenants";
@@ -27,6 +28,12 @@ const campaignsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/campaigns",
   component: CampaignsPage,
+});
+
+const campaignDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/campaigns/$campaignId",
+  component: CampaignDetailPage,
 });
 
 const leadsRoute = createRoute({
@@ -92,6 +99,7 @@ const adminTracebackRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   campaignsRoute,
+  campaignDetailRoute,
   leadsRoute,
   dncRoute,
   reportsRoute,
