@@ -12,7 +12,9 @@ import {
 } from "@/components/ui";
 import { Table, type Column } from "@/components/table";
 import { LeadDetail, type LeadForDetail } from "@/components/lead-detail";
-import { ApiError } from "@/lib/api";
+import { BulkActionBar } from "@/components/bulk-action-bar";
+import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { toast } from "@/lib/toast";
 
 interface Lead {
@@ -47,10 +49,40 @@ export function LeadsPage() {
   const [offset, setOffset] = useState(0);
   const [creating, setCreating] = useState(false);
   const [openLeadId, setOpenLeadId] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Set<string | number>>(new Set());
+  const token = useAuth((s) => s.token);
 
   const list = useApiQuery<ListResp>(["leads", offset], `/tenant/leads/?limit=${PAGE}&offset=${offset}`);
   const campaigns = useApiQuery<{ campaigns: Campaign[] }>(["campaigns-for-leads"], "/tenant/campaigns/");
   const campaignOptions = campaigns.data?.campaigns ?? [];
+
+  async function runBulk(action: "delete" | "dnc" | "attach", body: Record<string, unknown> = {}) {
+    const ids = Array.from(selected).map((v) => Number(v));
+    if (ids.length === 0) return;
+    try {
+      const resp = await api<Record<string, number>>(`/tenant/leads/bulk/${action}`, {
+        method: "POST",
+        token,
+        body: { lead_ids: ids, ...body },
+      });
+      if (action === "delete") {
+        toast.success("leads deleted", { description: `${resp.deleted} of ${resp.requested}` });
+      } else if (action === "dnc") {
+        toast.success("added to DNC", {
+          description: `${resp.dnc_added} new entries · ${resp.leads_marked} leads marked`,
+        });
+      } else if (action === "attach") {
+        const label = body.campaign_id === null ? "detached" : "attached to campaign";
+        toast.success(label, { description: `${resp.updated} leads` });
+      }
+      setSelected(new Set());
+      list.refetch();
+    } catch (e) {
+      toast.error("bulk action failed", {
+        description: e instanceof ApiError ? e.message : "unknown error",
+      });
+    }
+  }
 
   const rows = list.data?.leads ?? [];
   const total = list.data?.total ?? 0;
@@ -169,6 +201,9 @@ export function LeadsPage() {
             rowKey={(r) => r.id}
             onRowClick={(r) => setOpenLeadId(r.id)}
             loading={list.isLoading}
+            selectable
+            selectedIds={selected}
+            onSelectionChange={setSelected}
             pagination={{
               offset,
               limit: PAGE,
@@ -192,6 +227,40 @@ export function LeadsPage() {
         onPrev={openLead && rows[0]?.id !== openLead.id ? () => step(-1) : undefined}
         onNext={openLead && rows[rows.length - 1]?.id !== openLead.id ? () => step(1) : undefined}
         onMutated={() => list.refetch()}
+      />
+
+      <BulkActionBar
+        count={selected.size}
+        onClear={() => setSelected(new Set())}
+        actions={[
+          {
+            label: "mark dnc",
+            onRun: () => {
+              if (confirm(`mark ${selected.size} leads as DNC? they'll be skipped by the dialer.`)) {
+                void runBulk("dnc", { reason: "bulk-marked from leads page" });
+              }
+            },
+          },
+          {
+            label: "delete",
+            variant: "danger",
+            onRun: () => {
+              if (confirm(`delete ${selected.size} leads? this cannot be undone.`)) {
+                void runBulk("delete");
+              }
+            },
+          },
+        ]}
+        pickers={[
+          {
+            label: "→ campaign",
+            options: campaignOptions.map((c) => ({ id: c.id, label: c.name, sub: c.status })),
+            allowNone: true,
+            noneLabel: "detach from campaign",
+            emptyMessage: "no campaigns yet",
+            onPick: (id) => void runBulk("attach", { campaign_id: id === null ? null : Number(id) }),
+          },
+        ]}
       />
     </div>
   );

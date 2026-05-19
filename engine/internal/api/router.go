@@ -117,6 +117,7 @@ func NewRouter(cfg Config) http.Handler {
 
 	lRepo := lead.NewRepo()
 	tenL := &tenantLeads{repo: cfg.Repo, lRepo: lRepo}
+	tenLBulk := &tenantLeadsBulk{tenantLeads: tenL, dRepo: dnc.NewRepo()}
 	r.Route("/tenant/leads", func(r chi.Router) {
 		r.Use(auth.RequireAuth(cfg.Issuer))
 		r.Use(auth.RequireTenant)
@@ -128,6 +129,9 @@ func NewRouter(cfg Config) http.Handler {
 		r.Patch("/{id}", tenL.update)
 		r.Post("/{id}/redial", tenL.redial)
 		r.Delete("/{id}", tenL.delete)
+		r.Post("/bulk/delete", tenLBulk.delete)
+		r.Post("/bulk/attach", tenLBulk.attach)
+		r.Post("/bulk/dnc", tenLBulk.markDNC)
 	})
 
 	fsmRepo := fsm.NewRepo()
