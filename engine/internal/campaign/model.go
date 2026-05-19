@@ -31,13 +31,9 @@ type Campaign struct {
 	Status         Status
 	DialRatio      float64
 	MaxAbandonPct  float64
-	PromptAudio    *string
-	TransferDest   *string
-	CallerIDPool   json.RawMessage
 	RetryPolicy    json.RawMessage
 	CallingHours   json.RawMessage
 	TZStrategy     string
-	DNCListIDs     []int64
 	RunNo          int
 	CallConstraint string
 	CreatedAt      time.Time

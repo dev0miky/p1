@@ -29,9 +29,6 @@ type createCampaignRequest struct {
 	Mode           string          `json:"mode"`
 	DialRatio      *float64        `json:"dial_ratio"`
 	MaxAbandonPct  *float64        `json:"max_abandon_pct"`
-	PromptAudio    *string         `json:"prompt_audio"`
-	TransferDest   *string         `json:"transfer_dest"`
-	CallerIDPool   json.RawMessage `json:"caller_id_pool"`
 	RetryPolicy    json.RawMessage `json:"retry_policy"`
 	CallingHours   json.RawMessage `json:"calling_hours"`
 	TZStrategy     string          `json:"tz_strategy"`
@@ -48,9 +45,6 @@ type campaignResponse struct {
 	Status         string          `json:"status"`
 	DialRatio      float64         `json:"dial_ratio"`
 	MaxAbandonPct  float64         `json:"max_abandon_pct"`
-	PromptAudio    *string         `json:"prompt_audio,omitempty"`
-	TransferDest   *string         `json:"transfer_dest,omitempty"`
-	CallerIDPool   json.RawMessage `json:"caller_id_pool"`
 	RetryPolicy    json.RawMessage `json:"retry_policy"`
 	CallingHours   json.RawMessage `json:"calling_hours"`
 	TZStrategy     string          `json:"tz_strategy"`
@@ -69,9 +63,6 @@ func campaignToResponse(c campaign.Campaign) campaignResponse {
 		Status:         string(c.Status),
 		DialRatio:      c.DialRatio,
 		MaxAbandonPct:  c.MaxAbandonPct,
-		PromptAudio:    c.PromptAudio,
-		TransferDest:   c.TransferDest,
-		CallerIDPool:   c.CallerIDPool,
 		RetryPolicy:    c.RetryPolicy,
 		CallingHours:   c.CallingHours,
 		TZStrategy:     c.TZStrategy,
@@ -109,12 +100,9 @@ func (a *tenantCampaigns) create(w http.ResponseWriter, r *http.Request) {
 		Name:         req.Name,
 		Mode:         campaign.Mode(req.Mode),
 		Status:       campaign.StatusPaused,
-		CallerIDPool: req.CallerIDPool,
 		RetryPolicy:  req.RetryPolicy,
 		CallingHours: req.CallingHours,
 		TZStrategy:   req.TZStrategy,
-		PromptAudio:  req.PromptAudio,
-		TransferDest: req.TransferDest,
 	}
 	if req.DialRatio != nil {
 		c.DialRatio = *req.DialRatio
@@ -234,9 +222,6 @@ func (a *tenantCampaigns) update(w http.ResponseWriter, r *http.Request) {
 		Mode:           req.Mode,
 		DialRatio:      req.DialRatio,
 		MaxAbandonPct:  req.MaxAbandonPct,
-		PromptAudio:    req.PromptAudio,
-		TransferDest:   req.TransferDest,
-		CallerIDPool:   req.CallerIDPool,
 		RetryPolicy:    req.RetryPolicy,
 		CallingHours:   req.CallingHours,
 		TZStrategy:     req.TZStrategy,

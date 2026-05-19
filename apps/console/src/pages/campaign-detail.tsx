@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import clsx from "clsx";
@@ -248,6 +249,11 @@ export function CampaignDetailPage() {
           loading={callsQ.isLoading}
           error={callsQ.error ? (callsQ.error as ApiError).message : null}
         />
+      </motion.div>
+
+      <motion.div variants={fadeUp} className="mt-12 pt-8 border-t border-ink-400">
+        <SectionHeader title="resources" />
+        <ResourcesPanel campaignId={c.id} />
       </motion.div>
 
       <motion.div variants={fadeUp} className="mt-12 pt-8 border-t border-ink-400">
@@ -609,5 +615,332 @@ function SettingRow({ label, value }: { label: string; value: string }) {
       <span className="uppercase tracking-widest text-ink-700">{label}</span>
       <span className="text-ink-950">{value}</span>
     </div>
+  );
+}
+
+interface ResourceList {
+  sounds: { sound_id: number; sound_name: string; role: string; attached_at: string }[];
+  scripts: { script_id: number; script_name: string; type: string; attached_at: string }[];
+  lists: { list_id: number; list_name: string; lead_count: number; attached_at: string }[];
+}
+
+const SOUND_ROLES = ["greeting", "voicemail", "hold", "whisper", "opt_out_confirm"] as const;
+
+function ResourcesPanel({ campaignId }: { campaignId: number }) {
+  const resQ = useApiQuery<ResourceList>(["campaign-resources", campaignId], `/tenant/campaigns/${campaignId}/resources`);
+  const refetch = () => resQ.refetch();
+
+  if (resQ.isLoading) {
+    return <p className="font-mono text-2xs uppercase tracking-widest text-ink-700">loading…</p>;
+  }
+  if (resQ.error) {
+    return <ErrorBanner>{(resQ.error as ApiError).message}</ErrorBanner>;
+  }
+
+  const data = resQ.data ?? { sounds: [], scripts: [], lists: [] };
+  const grouped: Record<string, typeof data.sounds> = {};
+  for (const role of SOUND_ROLES) grouped[role] = [];
+  for (const s of data.sounds) (grouped[s.role] = grouped[s.role] ?? []).push(s);
+
+  return (
+    <div className="space-y-8">
+      <SubSection label="scripts">
+        <div className="flex flex-wrap items-center gap-2">
+          {data.scripts.length === 0 && <Dim>no scripts attached</Dim>}
+          {data.scripts.map((s) => (
+            <Pill
+              key={s.script_id}
+              label={s.script_name}
+              sub={s.type}
+              onRemove={async () => {
+                await fetch(`${apiBase}/tenant/campaigns/${campaignId}/resources/scripts/${s.script_id}`, {
+                  method: "DELETE",
+                  headers: authHeaders(),
+                });
+                toast.success("script detached");
+                refetch();
+              }}
+            />
+          ))}
+          <AttachScriptBtn campaignId={campaignId} attached={data.scripts.map((s) => s.script_id)} onAttached={refetch} />
+        </div>
+      </SubSection>
+
+      <SubSection label="lists">
+        <div className="flex flex-wrap items-center gap-2">
+          {data.lists.length === 0 && <Dim>no lists attached</Dim>}
+          {data.lists.map((l) => (
+            <Pill
+              key={l.list_id}
+              label={l.list_name}
+              sub={`${l.lead_count} leads`}
+              onRemove={async () => {
+                if (!confirm(`detach list "${l.list_name}"? leads keep their data but campaign_id is cleared.`)) return;
+                await fetch(`${apiBase}/tenant/campaigns/${campaignId}/resources/lists/${l.list_id}`, {
+                  method: "DELETE",
+                  headers: authHeaders(),
+                });
+                toast.success("list detached");
+                refetch();
+              }}
+            />
+          ))}
+          <AttachListBtn campaignId={campaignId} attached={data.lists.map((l) => l.list_id)} onAttached={refetch} />
+        </div>
+      </SubSection>
+
+      <SubSection label="sounds">
+        <div className="space-y-4">
+          {SOUND_ROLES.map((role) => {
+            const items = grouped[role] ?? [];
+            return (
+              <div key={role} className="grid grid-cols-[8rem_1fr] gap-4 items-start">
+                <span className="font-mono text-2xs uppercase tracking-widest text-ink-700 pt-1.5">{role}</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {items.length === 0 && <Dim>none</Dim>}
+                  {items.map((s) => (
+                    <Pill
+                      key={`${role}-${s.sound_id}`}
+                      label={s.sound_name}
+                      onRemove={async () => {
+                        await fetch(
+                          `${apiBase}/tenant/campaigns/${campaignId}/resources/sounds/${s.sound_id}?role=${role}`,
+                          { method: "DELETE", headers: authHeaders() },
+                        );
+                        toast.success("sound detached");
+                        refetch();
+                      }}
+                    />
+                  ))}
+                  <AttachSoundBtn
+                    campaignId={campaignId}
+                    role={role}
+                    attached={items.map((s) => s.sound_id)}
+                    onAttached={refetch}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </SubSection>
+    </div>
+  );
+}
+
+function SubSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="font-mono text-2xs uppercase tracking-widest text-ink-700 mb-3">§ {label}</p>
+      {children}
+    </div>
+  );
+}
+
+function Dim({ children }: { children: React.ReactNode }) {
+  return <span className="font-mono text-2xs uppercase tracking-widest text-ink-700">{children}</span>;
+}
+
+function Pill({ label, sub, onRemove }: { label: string; sub?: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-2 h-7 px-3 border border-ink-400 bg-ink-50 hover:border-ink-600 transition-colors duration-150">
+      <span className="text-sm text-ink-950 truncate max-w-[14rem]">{label}</span>
+      {sub && <span className="font-mono text-2xs uppercase tracking-widest text-ink-700">{sub}</span>}
+      <button
+        onClick={onRemove}
+        className="ml-1 text-ink-700 hover:text-danger transition-colors"
+        title="detach"
+      >
+        ×
+      </button>
+    </span>
+  );
+}
+
+const apiBase =
+  import.meta.env.VITE_API_BASE_URL ?? `https://api.${window.location.hostname.replace(/^app\./, "")}`;
+
+function authHeaders(): Record<string, string> {
+  const raw = localStorage.getItem("p1.auth");
+  const token = raw ? (JSON.parse(raw).state?.token as string | null) : null;
+  return token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
+}
+
+function AttachScriptBtn({
+  campaignId,
+  attached,
+  onAttached,
+}: {
+  campaignId: number;
+  attached: number[];
+  onAttached: () => void;
+}) {
+  const q = useApiQuery<{ scripts: { id: number; name: string; type: string }[] }>(
+    ["scripts-for-attach"],
+    "/tenant/scripts/",
+  );
+  const [open, setOpen] = useState(false);
+  const options = (q.data?.scripts ?? []).filter((s) => !attached.includes(s.id));
+
+  async function attach(id: number) {
+    await fetch(`${apiBase}/tenant/campaigns/${campaignId}/resources/scripts`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ script_id: id }),
+    });
+    toast.success("script attached");
+    onAttached();
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="h-7 inline-flex items-center px-3 font-mono text-2xs uppercase tracking-widest border border-dashed border-ink-500 text-ink-700 hover:text-ink-950 hover:border-ink-700 transition-colors"
+      >
+        + attach
+      </button>
+      {open && (
+        <PickerMenu
+          options={options.map((o) => ({ id: o.id, label: o.name, sub: o.type }))}
+          empty="no scripts available — create one first"
+          onPick={attach}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AttachListBtn({
+  campaignId,
+  attached,
+  onAttached,
+}: {
+  campaignId: number;
+  attached: number[];
+  onAttached: () => void;
+}) {
+  const q = useApiQuery<{ lists: { id: number; name: string; lead_count: number }[] }>(
+    ["lists-for-attach"],
+    "/tenant/lists/",
+  );
+  const [open, setOpen] = useState(false);
+  const options = (q.data?.lists ?? []).filter((l) => !attached.includes(l.id));
+
+  async function attach(id: number) {
+    await fetch(`${apiBase}/tenant/campaigns/${campaignId}/resources/lists`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ list_id: id }),
+    });
+    toast.success("list attached");
+    onAttached();
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="h-7 inline-flex items-center px-3 font-mono text-2xs uppercase tracking-widest border border-dashed border-ink-500 text-ink-700 hover:text-ink-950 hover:border-ink-700 transition-colors"
+      >
+        + attach
+      </button>
+      {open && (
+        <PickerMenu
+          options={options.map((o) => ({ id: o.id, label: o.name, sub: `${o.lead_count} leads` }))}
+          empty="no lists available — create one first"
+          onPick={attach}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AttachSoundBtn({
+  campaignId,
+  role,
+  attached,
+  onAttached,
+}: {
+  campaignId: number;
+  role: string;
+  attached: number[];
+  onAttached: () => void;
+}) {
+  const q = useApiQuery<{ sounds: { id: number; name: string; mime_type: string }[] }>(
+    ["sounds-for-attach"],
+    "/tenant/sounds/",
+  );
+  const [open, setOpen] = useState(false);
+  const options = (q.data?.sounds ?? []).filter((s) => !attached.includes(s.id));
+
+  async function attach(id: number) {
+    await fetch(`${apiBase}/tenant/campaigns/${campaignId}/resources/sounds`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ sound_id: id, role }),
+    });
+    toast.success("sound attached");
+    onAttached();
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="h-7 inline-flex items-center px-3 font-mono text-2xs uppercase tracking-widest border border-dashed border-ink-500 text-ink-700 hover:text-ink-950 hover:border-ink-700 transition-colors"
+      >
+        + attach
+      </button>
+      {open && (
+        <PickerMenu
+          options={options.map((o) => ({ id: o.id, label: o.name, sub: o.mime_type.split("/")[1] ?? "" }))}
+          empty="no sounds available — upload one first"
+          onPick={attach}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function PickerMenu({
+  options,
+  empty,
+  onPick,
+  onClose,
+}: {
+  options: { id: number; label: string; sub?: string }[];
+  empty: string;
+  onPick: (id: number) => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 z-30" onClick={onClose} aria-hidden />
+      <div className="absolute left-0 top-9 z-40 w-72 surface bg-ink-100 max-h-80 overflow-y-auto py-1">
+        {options.length === 0 ? (
+          <p className="px-4 py-3 font-mono text-2xs uppercase tracking-widest text-ink-700">{empty}</p>
+        ) : (
+          options.map((o) => (
+            <button
+              key={o.id}
+              onClick={() => onPick(o.id)}
+              className="w-full text-left px-4 py-2 flex items-baseline justify-between hover:bg-ink-200 transition-colors"
+            >
+              <span className="text-sm text-ink-950 truncate">{o.label}</span>
+              {o.sub && (
+                <span className="ml-3 font-mono text-2xs uppercase tracking-widest text-ink-700">{o.sub}</span>
+              )}
+            </button>
+          ))
+        )}
+      </div>
+    </>
   );
 }
