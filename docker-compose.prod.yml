@@ -23,7 +23,7 @@ services:
   freeswitch:
     deploy:
       resources:
-        limits: { cpus: "8", memory: 4G }
+        limits: { cpus: "4", memory: 4G }
 
   engine-api:
     deploy:
