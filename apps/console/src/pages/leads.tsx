@@ -301,7 +301,7 @@ function CampaignPicker({ lead, campaigns }: { lead: Lead; campaigns: Campaign[]
       onChange={(e) =>
         patch.mutate({ campaign_id: e.target.value === "" ? null : Number(e.target.value) })
       }
-      className="w-full bg-transparent font-mono text-2xs uppercase tracking-widest text-ink-900 border border-ink-400 px-2 py-1.5 hover:border-ink-700 focus:outline-none focus:border-phosphor disabled:opacity-50"
+      className="max-w-full bg-transparent font-mono text-2xs uppercase tracking-widest text-ink-900 border border-transparent px-1 py-0.5 hover:border-ink-500 focus:outline-none focus:border-phosphor disabled:opacity-50 appearance-none cursor-pointer truncate"
     >
       <option value="">— none —</option>
       {campaigns.map((c) => (
