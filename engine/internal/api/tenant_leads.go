@@ -310,6 +310,54 @@ func (a *tenantLeads) update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, leadToResponse(out))
 }
 
+func (a *tenantLeads) redial(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	claims, _ := auth.ClaimsFromContext(r.Context())
+	tid := claims.TenantID
+	if tid <= 0 {
+		writeError(w, http.StatusBadRequest, "no tenant context")
+		return
+	}
+	var out lead.Lead
+	err = db.WithCtx(r.Context(), a.repo.Pool(), db.Ctx{Role: claims.Role, TenantID: tid, UserID: claims.UserID}, func(tx pgx.Tx) error {
+		before, err := a.lRepo.GetLeadTx(r.Context(), tx, id)
+		if err != nil {
+			return err
+		}
+		out, err = a.lRepo.RedialLeadTx(r.Context(), tx, id)
+		if err != nil {
+			return err
+		}
+		return audit.Log(r.Context(), tx, audit.Entry{
+			RequestID:  middleware.GetReqID(r.Context()),
+			ActorType:  "user",
+			ActorID:    strconv.FormatInt(claims.UserID, 10),
+			TenantID:   &tid,
+			EntityType: "lead",
+			EntityID:   strconv.FormatInt(id, 10),
+			Action:     "redial",
+			Before:     map[string]any{"status": before.Status, "attempts": before.Attempts},
+			After:      map[string]any{"status": out.Status, "attempts": out.Attempts},
+			IP:         clientIP(r),
+			UserAgent:  r.UserAgent(),
+		})
+	})
+	if errors.Is(err, lead.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "lead not found")
+		return
+	}
+	if err != nil {
+		slog.Error("lead redial failed", "err", err, "tenant_id", tid, "lead_id", id, "req_id", middleware.GetReqID(r.Context()))
+		writeError(w, http.StatusInternalServerError, "redial failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, leadToResponse(out))
+}
+
 func (a *tenantLeads) delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {

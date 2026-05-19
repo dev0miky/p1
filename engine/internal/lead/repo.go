@@ -129,6 +129,22 @@ func (r *Repo) UpdateLeadTx(ctx context.Context, tx pgx.Tx, id int64, u LeadUpda
 	return out, err
 }
 
+func (r *Repo) RedialLeadTx(ctx context.Context, tx pgx.Tx, id int64) (Lead, error) {
+	var out Lead
+	row := tx.QueryRow(ctx, `
+		UPDATE leads
+		   SET status = 'new', attempts = 0, next_eligible_at = NULL,
+		       last_attempt_at = NULL, locked_by = NULL, locked_until = NULL,
+		       updated_at = now()
+		 WHERE id = $1
+	 RETURNING `+leadFields, id)
+	err := scanLead(row, &out)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return out, ErrNotFound
+	}
+	return out, err
+}
+
 func (r *Repo) DeleteLeadTx(ctx context.Context, tx pgx.Tx, id int64) error {
 	tag, err := tx.Exec(ctx, `DELETE FROM leads WHERE id = $1`, id)
 	if err != nil {
