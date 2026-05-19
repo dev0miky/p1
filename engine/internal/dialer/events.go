@@ -12,7 +12,6 @@ type StateAdvance struct {
 	To            fsm.State
 	Reason        string
 	HangupCause   string
-	Digit         string
 	StampAnswered bool
 	StampEnded    bool
 }
@@ -41,8 +40,6 @@ func EventToTransition(e esl.Event) (StateAdvance, bool) {
 			To:     fsm.StateBridged,
 			Reason: "channel_bridge",
 		}, true
-	case "DTMF":
-		return dtmfToTransition(e)
 	case "CUSTOM":
 		if e.Get("Event-Subclass") == "avmd::beep" {
 			return StateAdvance{
@@ -65,27 +62,6 @@ func EventToTransition(e esl.Event) (StateAdvance, bool) {
 	return StateAdvance{}, false
 }
 
-func dtmfToTransition(e esl.Event) (StateAdvance, bool) {
-	d := e.Get("DTMF-Digit")
-	switch d {
-	case "1":
-		return StateAdvance{
-			UUID:   e.UniqueID,
-			To:     fsm.StatePress1,
-			Reason: "dtmf:1",
-			Digit:  "1",
-		}, true
-	case "9":
-		return StateAdvance{
-			UUID:   e.UniqueID,
-			To:     fsm.StateOptOut,
-			Reason: "dtmf:9",
-			Digit:  "9",
-		}, true
-	}
-	return StateAdvance{}, false
-}
-
 func hangupToState(cause string) fsm.State {
 	switch strings.ToUpper(cause) {
 	case "NORMAL_CLEARING", "NORMAL_UNSPECIFIED", "ALLOTTED_TIMEOUT":
@@ -94,6 +70,8 @@ func hangupToState(cause string) fsm.State {
 		return fsm.StateBusy
 	case "NO_ANSWER", "NO_USER_RESPONSE", "ORIGINATOR_CANCEL", "RECOVERY_ON_TIMER_EXPIRE":
 		return fsm.StateNoAnswer
+	case "USER_REFUSE":
+		return fsm.StateOptOut
 	case "":
 		return fsm.StateCompleted
 	default:

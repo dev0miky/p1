@@ -37,6 +37,9 @@ type createScriptRequest struct {
 	TransferTo       *string  `json:"transfer_to"`
 	GreetingSoundID  *int64   `json:"greeting_sound_id"`
 	PreBridgeSoundID *int64   `json:"pre_bridge_sound_id"`
+	BridgeDigit      string   `json:"bridge_digit"`
+	WaitTimeoutMS    int      `json:"wait_timeout_ms"`
+	OptOutDigit      *string  `json:"opt_out_digit"`
 	Tags             []string `json:"tags"`
 }
 
@@ -50,6 +53,9 @@ type scriptResponse struct {
 	TransferTo       *string  `json:"transfer_to,omitempty"`
 	GreetingSoundID  *int64   `json:"greeting_sound_id,omitempty"`
 	PreBridgeSoundID *int64   `json:"pre_bridge_sound_id,omitempty"`
+	BridgeDigit      string   `json:"bridge_digit"`
+	WaitTimeoutMS    int      `json:"wait_timeout_ms"`
+	OptOutDigit      *string  `json:"opt_out_digit,omitempty"`
 	Tags             []string `json:"tags"`
 	CreatedAt        string   `json:"created_at"`
 	UpdatedAt        string   `json:"updated_at"`
@@ -70,6 +76,9 @@ func scriptToResponse(s script.Script) scriptResponse {
 		TransferTo:       s.TransferTo,
 		GreetingSoundID:  s.GreetingSoundID,
 		PreBridgeSoundID: s.PreBridgeSoundID,
+		BridgeDigit:      s.BridgeDigit,
+		WaitTimeoutMS:    s.WaitTimeoutMS,
+		OptOutDigit:      s.OptOutDigit,
 		Tags:             tags,
 		CreatedAt:        s.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:        s.UpdatedAt.Format(time.RFC3339),
@@ -104,6 +113,30 @@ func (a *tenantScripts) create(w http.ResponseWriter, r *http.Request) {
 			req.TransferTo = &t
 		}
 	}
+	if req.BridgeDigit == "" {
+		req.BridgeDigit = "1"
+	}
+	if !script.ValidDTMFDigit(req.BridgeDigit) {
+		writeError(w, http.StatusBadRequest, "bridge_digit must be one of 0-9, *, #")
+		return
+	}
+	if req.WaitTimeoutMS == 0 {
+		req.WaitTimeoutMS = 8000
+	}
+	if req.WaitTimeoutMS < 1000 || req.WaitTimeoutMS > 60000 {
+		writeError(w, http.StatusBadRequest, "wait_timeout_ms must be 1000–60000")
+		return
+	}
+	if req.OptOutDigit != nil {
+		if !script.ValidDTMFDigit(*req.OptOutDigit) {
+			writeError(w, http.StatusBadRequest, "opt_out_digit must be one of 0-9, *, #")
+			return
+		}
+		if *req.OptOutDigit == req.BridgeDigit {
+			writeError(w, http.StatusBadRequest, "opt_out_digit must differ from bridge_digit")
+			return
+		}
+	}
 	s := script.Script{
 		TenantID:         tid,
 		Name:             req.Name,
@@ -113,6 +146,9 @@ func (a *tenantScripts) create(w http.ResponseWriter, r *http.Request) {
 		TransferTo:       req.TransferTo,
 		GreetingSoundID:  req.GreetingSoundID,
 		PreBridgeSoundID: req.PreBridgeSoundID,
+		BridgeDigit:      req.BridgeDigit,
+		WaitTimeoutMS:    req.WaitTimeoutMS,
+		OptOutDigit:      req.OptOutDigit,
 		Tags:             req.Tags,
 	}
 	var created script.Script
@@ -234,6 +270,32 @@ func (a *tenantScripts) update(w http.ResponseWriter, r *http.Request) {
 	if v, ok := raw["pre_bridge_sound_id"]; ok {
 		patch.SetPreBridgeSoundID = true
 		_ = json.Unmarshal(v, &patch.PreBridgeSoundID)
+	}
+	if v, ok := raw["bridge_digit"]; ok {
+		_ = json.Unmarshal(v, &patch.BridgeDigit)
+		if patch.BridgeDigit != "" && !script.ValidDTMFDigit(patch.BridgeDigit) {
+			writeError(w, http.StatusBadRequest, "bridge_digit must be one of 0-9, *, #")
+			return
+		}
+	}
+	if v, ok := raw["wait_timeout_ms"]; ok {
+		var t int
+		_ = json.Unmarshal(v, &t)
+		if t != 0 {
+			if t < 1000 || t > 60000 {
+				writeError(w, http.StatusBadRequest, "wait_timeout_ms must be 1000–60000")
+				return
+			}
+			patch.WaitTimeoutMS = &t
+		}
+	}
+	if v, ok := raw["opt_out_digit"]; ok {
+		patch.SetOptOutDigit = true
+		_ = json.Unmarshal(v, &patch.OptOutDigit)
+		if patch.OptOutDigit != nil && !script.ValidDTMFDigit(*patch.OptOutDigit) {
+			writeError(w, http.StatusBadRequest, "opt_out_digit must be one of 0-9, *, #")
+			return
+		}
 	}
 	if v, ok := raw["tags"]; ok {
 		patch.SetTags = true

@@ -268,6 +268,11 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 	if p1.transferTo != "" && p1.greetingPath != "" {
 		vars["greeting_sound"] = p1.greetingPath
 		vars["transfer_to"] = p1.transferTo
+		vars["bridge_digit"] = p1.bridgeDigit
+		vars["wait_timeout_ms"] = strconv.Itoa(p1.waitTimeoutMS)
+		if p1.optOutDigit != "" {
+			vars["opt_out_digit"] = p1.optOutDigit
+		}
 		if p1.preBridgePath != "" {
 			vars["pre_bridge_sound"] = p1.preBridgePath
 		}
@@ -453,6 +458,9 @@ type press1Config struct {
 	transferTo    string
 	greetingPath  string
 	preBridgePath string
+	bridgeDigit   string
+	waitTimeoutMS int
+	optOutDigit   string
 }
 
 func (s *Service) pickPress1(ctx context.Context, tenantID, campaignID int64) press1Config {
@@ -477,8 +485,19 @@ func (s *Service) pickPress1(ctx context.Context, tenantID, campaignID int64) pr
 		return press1Config{}
 	}
 	cfg := press1Config{
-		transferTo:   *sc.TransferTo,
-		greetingPath: s.soundPath(*sc.GreetingTenantID, *sc.GreetingFileKey),
+		transferTo:    *sc.TransferTo,
+		greetingPath:  s.soundPath(*sc.GreetingTenantID, *sc.GreetingFileKey),
+		bridgeDigit:   sc.BridgeDigit,
+		waitTimeoutMS: sc.WaitTimeoutMS,
+	}
+	if cfg.bridgeDigit == "" {
+		cfg.bridgeDigit = "1"
+	}
+	if cfg.waitTimeoutMS <= 0 {
+		cfg.waitTimeoutMS = 8000
+	}
+	if sc.OptOutDigit != nil {
+		cfg.optOutDigit = *sc.OptOutDigit
 	}
 	if sc.PreBridgeFileKey != nil && sc.PreBridgeTenantID != nil {
 		cfg.preBridgePath = s.soundPath(*sc.PreBridgeTenantID, *sc.PreBridgeFileKey)

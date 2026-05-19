@@ -86,49 +86,31 @@ func TestUnknownEventIgnored(t *testing.T) {
 	}
 }
 
-func TestDTMFOneTransitionsToPress1(t *testing.T) {
-	e := esl.ParseEvent(map[string]string{
-		"Event-Name": "DTMF",
-		"Unique-ID":  "uuid",
-		"DTMF-Digit": "1",
-	})
-	got, ok := EventToTransition(e)
-	if !ok {
-		t.Fatal("DTMF=1 must map")
-	}
-	if got.To != fsm.StatePress1 {
-		t.Errorf("to: %s", got.To)
-	}
-	if got.Digit != "1" {
-		t.Errorf("digit not carried: %q", got.Digit)
-	}
-}
-
-func TestDTMFNineTransitionsToOptOut(t *testing.T) {
-	e := esl.ParseEvent(map[string]string{
-		"Event-Name": "DTMF",
-		"Unique-ID":  "uuid",
-		"DTMF-Digit": "9",
-	})
-	got, ok := EventToTransition(e)
-	if !ok || got.To != fsm.StateOptOut {
-		t.Errorf("DTMF=9 expected OptOut, got %+v ok=%v", got, ok)
-	}
-	if got.Digit != "9" {
-		t.Errorf("digit not carried: %q", got.Digit)
-	}
-}
-
-func TestDTMFOtherDigitsIgnored(t *testing.T) {
-	for _, d := range []string{"0", "2", "3", "4", "5", "6", "7", "8", "*", "#"} {
+func TestDTMFEventsNeverDriveStateDirectly(t *testing.T) {
+	for _, d := range []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "#"} {
 		e := esl.ParseEvent(map[string]string{
 			"Event-Name": "DTMF",
 			"Unique-ID":  "uuid",
 			"DTMF-Digit": d,
 		})
 		if _, ok := EventToTransition(e); ok {
-			t.Errorf("DTMF=%q should be ignored", d)
+			t.Errorf("DTMF=%q should not produce a state transition — bridge/opt-out come from lua via channel_bridge + hangup-cause", d)
 		}
+	}
+}
+
+func TestUserRefuseHangupMapsToOptOut(t *testing.T) {
+	e := esl.ParseEvent(map[string]string{
+		"Event-Name":   "CHANNEL_HANGUP_COMPLETE",
+		"Unique-ID":    "uuid",
+		"Hangup-Cause": "USER_REFUSE",
+	})
+	got, ok := EventToTransition(e)
+	if !ok || got.To != fsm.StateOptOut {
+		t.Errorf("USER_REFUSE expected OptOut, got %+v ok=%v", got, ok)
+	}
+	if !got.StampEnded {
+		t.Error("USER_REFUSE should stamp ended_at")
 	}
 }
 

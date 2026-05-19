@@ -32,9 +32,20 @@ type Script struct {
 	TransferTo       *string
 	GreetingSoundID  *int64
 	PreBridgeSoundID *int64
+	BridgeDigit      string
+	WaitTimeoutMS    int
+	OptOutDigit      *string
 	Tags             []string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+}
+
+func ValidDTMFDigit(s string) bool {
+	if len(s) != 1 {
+		return false
+	}
+	c := s[0]
+	return (c >= '0' && c <= '9') || c == '*' || c == '#'
 }
 
 var ErrNotFound = errors.New("script not found")

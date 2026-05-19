@@ -26,6 +26,9 @@ interface Script {
   transfer_to?: string | null;
   greeting_sound_id?: number | null;
   pre_bridge_sound_id?: number | null;
+  bridge_digit: string;
+  wait_timeout_ms: number;
+  opt_out_digit?: string | null;
   tags: string[];
   created_at: string;
   updated_at: string;
@@ -55,6 +58,10 @@ interface FormState {
   transferTo: string;
   greetingSoundID: number | null;
   preBridgeSoundID: number | null;
+  bridgeDigit: string;
+  waitTimeoutSec: number;
+  optOutEnabled: boolean;
+  optOutDigit: string;
   tags: string[];
 }
 
@@ -67,6 +74,10 @@ function emptyForm(): FormState {
     transferTo: "",
     greetingSoundID: null,
     preBridgeSoundID: null,
+    bridgeDigit: "1",
+    waitTimeoutSec: 8,
+    optOutEnabled: true,
+    optOutDigit: "9",
     tags: [],
   };
 }
@@ -80,6 +91,10 @@ function fromScript(s: Script): FormState {
     transferTo: s.transfer_to ?? "",
     greetingSoundID: s.greeting_sound_id ?? null,
     preBridgeSoundID: s.pre_bridge_sound_id ?? null,
+    bridgeDigit: s.bridge_digit || "1",
+    waitTimeoutSec: Math.round((s.wait_timeout_ms || 8000) / 1000),
+    optOutEnabled: !!s.opt_out_digit,
+    optOutDigit: s.opt_out_digit ?? "9",
     tags: s.tags ?? [],
   };
 }
@@ -92,6 +107,9 @@ interface ScriptPayload {
   transfer_to?: string | null;
   greeting_sound_id?: number | null;
   pre_bridge_sound_id?: number | null;
+  bridge_digit?: string;
+  wait_timeout_ms?: number;
+  opt_out_digit?: string | null;
   tags?: string[];
 }
 
@@ -105,6 +123,9 @@ function toPayload(f: FormState, isCreate: boolean): ScriptPayload {
     transfer_to: isPress1 ? f.transferTo || null : null,
     greeting_sound_id: f.greetingSoundID,
     pre_bridge_sound_id: isPress1 ? f.preBridgeSoundID : null,
+    bridge_digit: isPress1 ? f.bridgeDigit : "1",
+    wait_timeout_ms: isPress1 ? Math.max(1000, Math.min(60000, f.waitTimeoutSec * 1000)) : 8000,
+    opt_out_digit: isPress1 && f.optOutEnabled ? f.optOutDigit : null,
   };
   if (isCreate) {
     payload.description = f.description || undefined;
@@ -217,9 +238,13 @@ function FlowSummary({ script }: { script: Script }) {
     if (!hasGreeting || !hasTransfer) {
       return <span className="font-mono text-2xs uppercase tracking-widest text-danger">incomplete</span>;
     }
+    const bridge = script.bridge_digit || "1";
+    const optOut = script.opt_out_digit ? ` · ${script.opt_out_digit} → dnc` : "";
+    const pre = script.pre_bridge_sound_id ? " (+pre-bridge)" : "";
     return (
       <span className="font-mono text-2xs uppercase tracking-widest text-ink-800 truncate">
-        greeting → 1 → bridge {script.pre_bridge_sound_id ? "(+ pre-bridge audio)" : ""}
+        greeting → {bridge} → bridge{pre}
+        {optOut}
       </span>
     );
   }
@@ -443,13 +468,16 @@ function FlowBuilder({ form, onChange }: { form: FormState; onChange: (f: FormSt
     setShowPreBridge(form.preBridgeSoundID !== null);
   }, [form.preBridgeSoundID]);
 
+  const digitClash = form.optOutEnabled && form.bridgeDigit === form.optOutDigit;
+  const stepNum = (n: number) => n;
+
   return (
     <div>
       <div className="font-mono text-2xs uppercase tracking-widest text-ink-700 mb-3">§ flow</div>
       <ol className="border border-ink-400 bg-ink-50">
         {form.type === "press1" ? (
           <>
-            <FlowStep n={1} title="after pickup" action="play greeting">
+            <FlowStep n={stepNum(1)} title="after pickup" action="play greeting">
               <SoundPicker
                 value={form.greetingSoundID}
                 onChange={(id) => set("greetingSoundID", id)}
@@ -459,9 +487,39 @@ function FlowBuilder({ form, onChange }: { form: FormState; onChange: (f: FormSt
               />
             </FlowStep>
 
-            <FlowStep n={2} title="then" action="wait up to 8s for digit" auto />
+            <FlowStep
+              n={stepNum(2)}
+              title="then"
+              action={
+                <span className="inline-flex items-baseline gap-2">
+                  <span>wait up to</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={form.waitTimeoutSec}
+                    onChange={(e) =>
+                      set(
+                        "waitTimeoutSec",
+                        Math.max(1, Math.min(60, parseInt(e.target.value || "0", 10) || 0)),
+                      )
+                    }
+                    className="w-14 h-7 bg-ink-100 border border-ink-400 px-2 font-mono text-sm text-ink-950 tabular-nums text-center focus:outline-none focus:border-phosphor"
+                  />
+                  <span>seconds for a digit</span>
+                </span>
+              }
+            />
 
-            <FlowStep n={3} title="on press 1" action="bridge to an agent">
+            <FlowStep
+              n={stepNum(3)}
+              title="on press"
+              digitPicker={{
+                value: form.bridgeDigit,
+                onChange: (d) => set("bridgeDigit", d),
+              }}
+              action="bridge to an agent"
+            >
               <div className="space-y-3">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
@@ -503,8 +561,31 @@ function FlowBuilder({ form, onChange }: { form: FormState; onChange: (f: FormSt
               </div>
             </FlowStep>
 
-            <FlowStep n={4} title="on press 9" action="opt-out → write to internal DNC" auto />
-            <FlowStep n={5} title="no input" action="hang up" auto last />
+            <FlowStep
+              n={stepNum(4)}
+              title="opt-out branch"
+              toggle={{
+                checked: form.optOutEnabled,
+                onChange: (v) => set("optOutEnabled", v),
+                label: "enabled",
+              }}
+              action={
+                form.optOutEnabled ? (
+                  <span className="inline-flex items-baseline gap-2">
+                    <span>on press</span>
+                    <DigitSelect
+                      value={form.optOutDigit}
+                      onChange={(d) => set("optOutDigit", d)}
+                    />
+                    <span>→ opt-out → write to internal DNC</span>
+                  </span>
+                ) : (
+                  <span className="text-ink-700">disabled · no DTMF opt-out captured</span>
+                )
+              }
+            />
+
+            <FlowStep n={stepNum(5)} title="no input" action="hang up" auto last />
           </>
         ) : (
           <>
@@ -521,6 +602,11 @@ function FlowBuilder({ form, onChange }: { form: FormState; onChange: (f: FormSt
           </>
         )}
       </ol>
+      {digitClash && (
+        <p className="mt-2 font-mono text-2xs uppercase tracking-widest text-danger">
+          bridge digit and opt-out digit must differ
+        </p>
+      )}
     </div>
   );
 }
@@ -531,41 +617,80 @@ function FlowStep({
   action,
   auto = false,
   last = false,
+  digitPicker,
+  toggle,
   children,
 }: {
   n: number;
   title: string;
-  action: string;
+  action: React.ReactNode;
   auto?: boolean;
   last?: boolean;
+  digitPicker?: { value: string; onChange: (d: string) => void };
+  toggle?: { checked: boolean; onChange: (v: boolean) => void; label: string };
   children?: React.ReactNode;
 }) {
+  const disabled = toggle ? !toggle.checked : false;
   return (
     <li className={clsx("relative px-5 py-4", !last && "border-b border-ink-400")}>
       <div className="flex items-start gap-4">
         <div
           className={clsx(
             "shrink-0 w-7 h-7 flex items-center justify-center font-mono text-2xs tabular-nums border",
-            auto ? "border-ink-500 text-ink-700" : "border-phosphor text-phosphor",
+            auto || disabled ? "border-ink-500 text-ink-700" : "border-phosphor text-phosphor",
           )}
         >
           {n.toString().padStart(2, "0")}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-3">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span className="font-mono text-2xs uppercase tracking-widest text-ink-700">{title}</span>
+            {digitPicker && (
+              <DigitSelect value={digitPicker.value} onChange={digitPicker.onChange} />
+            )}
             <span className="text-ink-600">→</span>
-            <span className="text-sm text-ink-950">{action}</span>
-            {auto && (
+            <span className={clsx("text-sm", disabled ? "text-ink-700" : "text-ink-950")}>{action}</span>
+            {toggle && (
+              <label className="ml-auto flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={toggle.checked}
+                  onChange={(e) => toggle.onChange(e.target.checked)}
+                  className="accent-phosphor"
+                />
+                <span className="font-mono text-2xs uppercase tracking-widest text-ink-800">
+                  {toggle.label}
+                </span>
+              </label>
+            )}
+            {auto && !toggle && (
               <span className="ml-auto font-mono text-2xs uppercase tracking-widest text-ink-600">
                 auto
               </span>
             )}
           </div>
-          {children && <div className="mt-3">{children}</div>}
+          {children && !disabled && <div className="mt-3">{children}</div>}
         </div>
       </div>
     </li>
+  );
+}
+
+const DTMF_DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "#"] as const;
+
+function DigitSelect({ value, onChange }: { value: string; onChange: (d: string) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-7 bg-ink-100 border border-phosphor px-2 font-mono text-sm text-phosphor tabular-nums focus:outline-none"
+    >
+      {DTMF_DIGITS.map((d) => (
+        <option key={d} value={d}>
+          {d}
+        </option>
+      ))}
+    </select>
   );
 }
 
