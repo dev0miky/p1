@@ -25,55 +25,60 @@ type tenantCampaigns struct {
 }
 
 type createCampaignRequest struct {
-	Name          string          `json:"name"`
-	Mode          string          `json:"mode"`
-	DialRatio     *float64        `json:"dial_ratio"`
-	MaxAbandonPct *float64        `json:"max_abandon_pct"`
-	PromptAudio   *string         `json:"prompt_audio"`
-	TransferDest  *string         `json:"transfer_dest"`
-	CallerIDPool  json.RawMessage `json:"caller_id_pool"`
-	RetryPolicy   json.RawMessage `json:"retry_policy"`
-	CallingHours  json.RawMessage `json:"calling_hours"`
-	TZStrategy    string          `json:"tz_strategy"`
+	Name           string          `json:"name"`
+	Mode           string          `json:"mode"`
+	DialRatio      *float64        `json:"dial_ratio"`
+	MaxAbandonPct  *float64        `json:"max_abandon_pct"`
+	PromptAudio    *string         `json:"prompt_audio"`
+	TransferDest   *string         `json:"transfer_dest"`
+	CallerIDPool   json.RawMessage `json:"caller_id_pool"`
+	RetryPolicy    json.RawMessage `json:"retry_policy"`
+	CallingHours   json.RawMessage `json:"calling_hours"`
+	TZStrategy     string          `json:"tz_strategy"`
+	CallConstraint string          `json:"call_constraint"`
 }
 
 type updateCampaignRequest = createCampaignRequest
 
 type campaignResponse struct {
-	ID            int64           `json:"id"`
-	TenantID      int64           `json:"tenant_id"`
-	Name          string          `json:"name"`
-	Mode          string          `json:"mode"`
-	Status        string          `json:"status"`
-	DialRatio     float64         `json:"dial_ratio"`
-	MaxAbandonPct float64         `json:"max_abandon_pct"`
-	PromptAudio   *string         `json:"prompt_audio,omitempty"`
-	TransferDest  *string         `json:"transfer_dest,omitempty"`
-	CallerIDPool  json.RawMessage `json:"caller_id_pool"`
-	RetryPolicy   json.RawMessage `json:"retry_policy"`
-	CallingHours  json.RawMessage `json:"calling_hours"`
-	TZStrategy    string          `json:"tz_strategy"`
-	CreatedAt     string          `json:"created_at"`
-	UpdatedAt     string          `json:"updated_at"`
+	ID             int64           `json:"id"`
+	TenantID       int64           `json:"tenant_id"`
+	Name           string          `json:"name"`
+	Mode           string          `json:"mode"`
+	Status         string          `json:"status"`
+	DialRatio      float64         `json:"dial_ratio"`
+	MaxAbandonPct  float64         `json:"max_abandon_pct"`
+	PromptAudio    *string         `json:"prompt_audio,omitempty"`
+	TransferDest   *string         `json:"transfer_dest,omitempty"`
+	CallerIDPool   json.RawMessage `json:"caller_id_pool"`
+	RetryPolicy    json.RawMessage `json:"retry_policy"`
+	CallingHours   json.RawMessage `json:"calling_hours"`
+	TZStrategy     string          `json:"tz_strategy"`
+	RunNo          int             `json:"run_no"`
+	CallConstraint string          `json:"call_constraint"`
+	CreatedAt      string          `json:"created_at"`
+	UpdatedAt      string          `json:"updated_at"`
 }
 
 func campaignToResponse(c campaign.Campaign) campaignResponse {
 	return campaignResponse{
-		ID:            c.ID,
-		TenantID:      c.TenantID,
-		Name:          c.Name,
-		Mode:          string(c.Mode),
-		Status:        string(c.Status),
-		DialRatio:     c.DialRatio,
-		MaxAbandonPct: c.MaxAbandonPct,
-		PromptAudio:   c.PromptAudio,
-		TransferDest:  c.TransferDest,
-		CallerIDPool:  c.CallerIDPool,
-		RetryPolicy:   c.RetryPolicy,
-		CallingHours:  c.CallingHours,
-		TZStrategy:    c.TZStrategy,
-		CreatedAt:     c.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:     c.UpdatedAt.Format(time.RFC3339),
+		ID:             c.ID,
+		TenantID:       c.TenantID,
+		Name:           c.Name,
+		Mode:           string(c.Mode),
+		Status:         string(c.Status),
+		DialRatio:      c.DialRatio,
+		MaxAbandonPct:  c.MaxAbandonPct,
+		PromptAudio:    c.PromptAudio,
+		TransferDest:   c.TransferDest,
+		CallerIDPool:   c.CallerIDPool,
+		RetryPolicy:    c.RetryPolicy,
+		CallingHours:   c.CallingHours,
+		TZStrategy:     c.TZStrategy,
+		RunNo:          c.RunNo,
+		CallConstraint: c.CallConstraint,
+		CreatedAt:      c.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:      c.UpdatedAt.Format(time.RFC3339),
 	}
 }
 
@@ -218,19 +223,24 @@ func (a *tenantCampaigns) update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid tz_strategy")
 		return
 	}
+	if req.CallConstraint != "" && !campaign.ValidCallConstraint(req.CallConstraint) {
+		writeError(w, http.StatusBadRequest, "invalid call_constraint")
+		return
+	}
 
 	patch := campaign.UpdatePatch{
-		Name:          req.Name,
-		Status:        req.Status,
-		Mode:          req.Mode,
-		DialRatio:     req.DialRatio,
-		MaxAbandonPct: req.MaxAbandonPct,
-		PromptAudio:   req.PromptAudio,
-		TransferDest:  req.TransferDest,
-		CallerIDPool:  req.CallerIDPool,
-		RetryPolicy:   req.RetryPolicy,
-		CallingHours:  req.CallingHours,
-		TZStrategy:    req.TZStrategy,
+		Name:           req.Name,
+		Status:         req.Status,
+		Mode:           req.Mode,
+		DialRatio:      req.DialRatio,
+		MaxAbandonPct:  req.MaxAbandonPct,
+		PromptAudio:    req.PromptAudio,
+		TransferDest:   req.TransferDest,
+		CallerIDPool:   req.CallerIDPool,
+		RetryPolicy:    req.RetryPolicy,
+		CallingHours:   req.CallingHours,
+		TZStrategy:     req.TZStrategy,
+		CallConstraint: req.CallConstraint,
 	}
 
 	claims, _ := auth.ClaimsFromContext(r.Context())

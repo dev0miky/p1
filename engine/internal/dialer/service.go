@@ -163,6 +163,7 @@ func (s *Service) paceCampaign(ctx context.Context, c campaign.Campaign) {
 			NodeID:     s.cfg.NodeID,
 			Limit:      toDial,
 			LockFor:    2 * time.Minute,
+			Constraint: c.CallConstraint,
 		})
 		return err
 	}); err != nil {
@@ -210,11 +211,12 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 	callUUID := uuid.NewString()
 	if err := db.WithCtx(ctx, s.cfg.Pool, db.Ctx{Role: "super_admin", TenantID: c.TenantID}, func(tx pgx.Tx) error {
 		_, err := s.fsm.CreateTx(ctx, tx, fsm.CreateInput{
-			UUID:         callUUID,
-			TenantID:     c.TenantID,
-			CampaignID:   &c.ID,
-			LeadID:       &l.ID,
-			DialedNumber: l.PhoneE164,
+			UUID:          callUUID,
+			TenantID:      c.TenantID,
+			CampaignID:    &c.ID,
+			CampaignRunNo: c.RunNo,
+			LeadID:        &l.ID,
+			DialedNumber:  l.PhoneE164,
 		})
 		return err
 	}); err != nil {

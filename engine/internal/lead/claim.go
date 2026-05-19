@@ -13,6 +13,36 @@ type ClaimOptions struct {
 	NodeID     string
 	LockFor    time.Duration
 	Limit      int
+	Constraint string // matches campaign.CallConstraint values
+}
+
+// callConstraintPredicate maps a call_constraint enum to the extra AND clause
+// applied at lead claim time. Empty / "no_constraint" / unknown returns "".
+// The clauses are static strings (no user input) so safe to inline.
+func callConstraintPredicate(s string) string {
+	switch s {
+	case "only_answered", "only_human_answered":
+		return " AND n_answered > 0"
+	case "only_machine_answered":
+		return " AND n_voicemail > 0"
+	case "only_transfers":
+		return " AND n_transferred > 0"
+	case "only_failed_transfers":
+		return " AND n_transferred > 0 AND n_transfer_completed = 0"
+	case "only_successful_transfers":
+		return " AND n_transfer_completed > 0"
+	case "only_errors":
+		return " AND n_error > 0"
+	case "skip_answered", "skip_human_answered":
+		return " AND n_answered = 0"
+	case "skip_machine_answered":
+		return " AND n_voicemail = 0"
+	case "skip_successful_transfers":
+		return " AND n_transfer_completed = 0"
+	case "skip_errors":
+		return " AND n_error = 0"
+	}
+	return ""
 }
 
 func (r *Repo) ClaimBatchTx(ctx context.Context, tx pgx.Tx, opts ClaimOptions) ([]Lead, error) {
@@ -32,6 +62,7 @@ func (r *Repo) ClaimBatchTx(ctx context.Context, tx pgx.Tx, opts ClaimOptions) (
 			WHERE campaign_id = $1
 			  AND status IN ('new', 'queued')
 			  AND (next_eligible_at IS NULL OR next_eligible_at <= now())
+			  `+callConstraintPredicate(opts.Constraint)+`
 			ORDER BY next_eligible_at NULLS FIRST, id
 			LIMIT $2
 			FOR UPDATE SKIP LOCKED

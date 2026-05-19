@@ -272,3 +272,69 @@ func TestCampaignStatsCrossTenantReturns404(t *testing.T) {
 		}
 	}
 }
+
+func TestCampaignActivateBumpsRunNo(t *testing.T) {
+	s := newStack(t)
+	ctx := context.Background()
+	tn, _ := s.repo.CreateTenantAsSuperAdmin(ctx, tenant.Tenant{Slug: "crn", Name: "x", SIPDomain: "crn.sip"})
+	tok := s.tokenFor(t, 1, tn.ID, "tenant_owner")
+
+	w := s.do(t, "POST", "/tenant/campaigns/", tok, map[string]any{"name": "c1", "mode": "press1"})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	var c map[string]any
+	json.Unmarshal(w.Body.Bytes(), &c)
+	id := int64(c["id"].(float64))
+	if int(c["run_no"].(float64)) != 0 {
+		t.Fatalf("new campaign should have run_no=0, got %v", c["run_no"])
+	}
+
+	w = s.do(t, "PATCH", "/tenant/campaigns/"+strconv.FormatInt(id, 10), tok, map[string]any{"status": "active"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("activate: %d", w.Code)
+	}
+	json.Unmarshal(w.Body.Bytes(), &c)
+	if int(c["run_no"].(float64)) != 1 {
+		t.Fatalf("first activate should bump run_no to 1, got %v", c["run_no"])
+	}
+
+	w = s.do(t, "PATCH", "/tenant/campaigns/"+strconv.FormatInt(id, 10), tok, map[string]any{"status": "active"})
+	json.Unmarshal(w.Body.Bytes(), &c)
+	if int(c["run_no"].(float64)) != 1 {
+		t.Fatalf("active->active should NOT bump, got %v", c["run_no"])
+	}
+
+	s.do(t, "PATCH", "/tenant/campaigns/"+strconv.FormatInt(id, 10), tok, map[string]any{"status": "paused"})
+	w = s.do(t, "PATCH", "/tenant/campaigns/"+strconv.FormatInt(id, 10), tok, map[string]any{"status": "active"})
+	json.Unmarshal(w.Body.Bytes(), &c)
+	if int(c["run_no"].(float64)) != 2 {
+		t.Fatalf("paused->active should bump to 2, got %v", c["run_no"])
+	}
+}
+
+func TestCampaignCallConstraintAcceptsValidRejectsInvalid(t *testing.T) {
+	s := newStack(t)
+	ctx := context.Background()
+	tn, _ := s.repo.CreateTenantAsSuperAdmin(ctx, tenant.Tenant{Slug: "ccc", Name: "x", SIPDomain: "ccc.sip"})
+	tok := s.tokenFor(t, 1, tn.ID, "tenant_owner")
+
+	w := s.do(t, "POST", "/tenant/campaigns/", tok, map[string]any{"name": "c1", "mode": "broadcast"})
+	var c map[string]any
+	json.Unmarshal(w.Body.Bytes(), &c)
+	id := int64(c["id"].(float64))
+
+	w = s.do(t, "PATCH", "/tenant/campaigns/"+strconv.FormatInt(id, 10), tok, map[string]any{"call_constraint": "only_machine_answered"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("set constraint: %d %s", w.Code, w.Body.String())
+	}
+	json.Unmarshal(w.Body.Bytes(), &c)
+	if c["call_constraint"] != "only_machine_answered" {
+		t.Fatalf("constraint not set: %v", c["call_constraint"])
+	}
+
+	w = s.do(t, "PATCH", "/tenant/campaigns/"+strconv.FormatInt(id, 10), tok, map[string]any{"call_constraint": "bogus"})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("bogus constraint: want 400, got %d", w.Code)
+	}
+}

@@ -17,49 +17,51 @@ var (
 )
 
 type Call struct {
-	UUID         string
-	TenantID     int64
-	CampaignID   *int64
-	LeadID       *int64
-	State        State
-	Version      int
-	DialedNumber string
-	CallerID     *string
-	AMDResult    *string
-	DTMF         *string
-	HangupCause  *string
-	Metadata     json.RawMessage
-	StartedAt    time.Time
-	AnsweredAt   *time.Time
-	BridgedAt    *time.Time
-	EndedAt      *time.Time
-	UpdatedAt    time.Time
+	UUID          string
+	TenantID      int64
+	CampaignID    *int64
+	CampaignRunNo int
+	LeadID        *int64
+	State         State
+	Version       int
+	DialedNumber  string
+	CallerID      *string
+	AMDResult     *string
+	DTMF          *string
+	HangupCause   *string
+	Metadata      json.RawMessage
+	StartedAt     time.Time
+	AnsweredAt    *time.Time
+	BridgedAt     *time.Time
+	EndedAt       *time.Time
+	UpdatedAt     time.Time
 }
 
 type Repo struct{}
 
 func NewRepo() *Repo { return &Repo{} }
 
-const callFields = `uuid, tenant_id, campaign_id, lead_id, state, version,
+const callFields = `uuid, tenant_id, campaign_id, campaign_run_no, lead_id, state, version,
   dialed_number, caller_id, amd_result, dtmf, hangup_cause, metadata,
   started_at, answered_at, bridged_at, ended_at, updated_at`
 
 func scanCall(row pgx.Row, c *Call) error {
 	return row.Scan(
-		&c.UUID, &c.TenantID, &c.CampaignID, &c.LeadID, &c.State, &c.Version,
+		&c.UUID, &c.TenantID, &c.CampaignID, &c.CampaignRunNo, &c.LeadID, &c.State, &c.Version,
 		&c.DialedNumber, &c.CallerID, &c.AMDResult, &c.DTMF, &c.HangupCause, &c.Metadata,
 		&c.StartedAt, &c.AnsweredAt, &c.BridgedAt, &c.EndedAt, &c.UpdatedAt,
 	)
 }
 
 type CreateInput struct {
-	UUID         string
-	TenantID     int64
-	CampaignID   *int64
-	LeadID       *int64
-	DialedNumber string
-	CallerID     *string
-	Metadata     json.RawMessage
+	UUID          string
+	TenantID      int64
+	CampaignID    *int64
+	CampaignRunNo int
+	LeadID        *int64
+	DialedNumber  string
+	CallerID      *string
+	Metadata      json.RawMessage
 }
 
 func (r *Repo) CreateTx(ctx context.Context, tx pgx.Tx, in CreateInput) (Call, error) {
@@ -68,10 +70,10 @@ func (r *Repo) CreateTx(ctx context.Context, tx pgx.Tx, in CreateInput) (Call, e
 	}
 	var out Call
 	row := tx.QueryRow(ctx, `
-		INSERT INTO call_state (uuid, tenant_id, campaign_id, lead_id, state, dialed_number, caller_id, metadata)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO call_state (uuid, tenant_id, campaign_id, campaign_run_no, lead_id, state, dialed_number, caller_id, metadata)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING `+callFields,
-		in.UUID, in.TenantID, in.CampaignID, in.LeadID, string(StateQueued),
+		in.UUID, in.TenantID, in.CampaignID, in.CampaignRunNo, in.LeadID, string(StateQueued),
 		in.DialedNumber, in.CallerID, in.Metadata)
 	if err := scanCall(row, &out); err != nil {
 		return out, err
