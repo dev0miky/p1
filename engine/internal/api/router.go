@@ -13,6 +13,7 @@ import (
 	"p1/engine/internal/callerid"
 	"p1/engine/internal/campaign"
 	"p1/engine/internal/dnc"
+	"p1/engine/internal/extagent"
 	"p1/engine/internal/fsm"
 	"p1/engine/internal/lead"
 	"p1/engine/internal/leadimport"
@@ -230,6 +231,18 @@ func NewRouter(cfg Config) http.Handler {
 		r.Get("/{id}", tenCIDs.get)
 		r.Patch("/{id}", tenCIDs.update)
 		r.Delete("/{id}", tenCIDs.delete)
+	})
+
+	tenEA := &tenantExternalAgents{repo: cfg.Repo, aRepo: extagent.NewRepo()}
+	r.Route("/tenant/external-agents", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireTenant)
+		r.Use(auth.RequireAction(auth.ActionManageCampaigns))
+		r.Post("/", tenEA.create)
+		r.Get("/", tenEA.list)
+		r.Get("/{id}", tenEA.get)
+		r.Patch("/{id}", tenEA.update)
+		r.Delete("/{id}", tenEA.delete)
 	})
 
 	return r

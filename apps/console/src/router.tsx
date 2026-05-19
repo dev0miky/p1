@@ -7,6 +7,7 @@ import { SoundsPage } from "@/pages/sounds";
 import { ScriptsPage } from "@/pages/scripts";
 import { ListsPage } from "@/pages/lists";
 import { CallerIDsPage } from "@/pages/caller-ids";
+import { AgentsPage } from "@/pages/agents";
 import { LeadsPage } from "@/pages/leads";
 import { DNCPage } from "@/pages/dnc";
 import { AdminTenantsPage } from "@/pages/admin-tenants";
@@ -85,7 +86,7 @@ const reportsRoute = createRoute({
 const agentsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/agents",
-  component: () => <Placeholder section="§ agents" title="Agents" body="Roster, presence, performance." />,
+  component: AgentsPage,
 });
 
 const usersRoute = createRoute({
