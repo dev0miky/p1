@@ -183,8 +183,14 @@ func (c *Client) Originate(ctx context.Context, p OriginateParams) (jobUUID stri
 	if action == "" {
 		action = "&park"
 	}
-	cmd := fmt.Sprintf("%ssofia/gateway/%s/%s %s", p.Vars, p.Gateway, p.Dest, action)
-	return c.BgAPI(ctx, cmd)
+	return c.BgAPI(ctx, BuildOriginateCmd(p, action))
+}
+
+func BuildOriginateCmd(p OriginateParams, action string) string {
+	if action == "" {
+		action = "&park"
+	}
+	return fmt.Sprintf("originate %ssofia/gateway/%s/%s %s", p.Vars, p.Gateway, p.Dest, action)
 }
 
 func (c *Client) Close() {
