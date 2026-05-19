@@ -135,6 +135,53 @@ type UpdatePatch struct {
 	CallConstraint string
 }
 
+type DeleteOutcome string
+
+const (
+	DeleteOutcomeHard     DeleteOutcome = "deleted"
+	DeleteOutcomeArchived DeleteOutcome = "archived"
+)
+
+func (r *Repo) DeleteTx(ctx context.Context, tx pgx.Tx, id int64) (DeleteOutcome, error) {
+	var hasHistory bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM call_state WHERE campaign_id = $1)`, id).Scan(&hasHistory); err != nil {
+		return "", err
+	}
+	if hasHistory {
+		tag, err := tx.Exec(ctx, `UPDATE campaigns SET status = 'archived', updated_at = now() WHERE id = $1`, id)
+		if err != nil {
+			return "", err
+		}
+		if tag.RowsAffected() == 0 {
+			return "", ErrNotFound
+		}
+		return DeleteOutcomeArchived, nil
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM campaign_sounds    WHERE campaign_id = $1`, id); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM campaign_scripts   WHERE campaign_id = $1`, id); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM campaign_lists     WHERE campaign_id = $1`, id); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM campaign_caller_ids WHERE campaign_id = $1`, id); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE leads SET campaign_id = NULL, updated_at = now() WHERE campaign_id = $1`, id); err != nil {
+		return "", err
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM campaigns WHERE id = $1`, id)
+	if err != nil {
+		return "", err
+	}
+	if tag.RowsAffected() == 0 {
+		return "", ErrNotFound
+	}
+	return DeleteOutcomeHard, nil
+}
+
 // ---- resource attach helpers ----
 
 const (

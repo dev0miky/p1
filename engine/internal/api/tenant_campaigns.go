@@ -267,6 +267,54 @@ func (a *tenantCampaigns) update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, campaignToResponse(after))
 }
 
+func (a *tenantCampaigns) delete(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	claims, _ := auth.ClaimsFromContext(r.Context())
+	tid := claims.TenantID
+	if tid <= 0 {
+		writeError(w, http.StatusBadRequest, "no tenant context")
+		return
+	}
+	var before campaign.Campaign
+	var outcome campaign.DeleteOutcome
+	err = db.WithCtx(r.Context(), a.repo.Pool(), db.Ctx{Role: claims.Role, TenantID: tid, UserID: claims.UserID}, func(tx pgx.Tx) error {
+		var err error
+		before, err = a.cRepo.GetTx(r.Context(), tx, id)
+		if err != nil {
+			return err
+		}
+		outcome, err = a.cRepo.DeleteTx(r.Context(), tx, id)
+		if err != nil {
+			return err
+		}
+		return audit.Log(r.Context(), tx, audit.Entry{
+			RequestID:  middleware.GetReqID(r.Context()),
+			ActorType:  "user",
+			ActorID:    strconv.FormatInt(claims.UserID, 10),
+			TenantID:   &tid,
+			EntityType: "campaign",
+			EntityID:   strconv.FormatInt(id, 10),
+			Action:     string(outcome),
+			Before:     map[string]any{"name": before.Name, "status": before.Status},
+			IP:         clientIP(r),
+			UserAgent:  r.UserAgent(),
+		})
+	})
+	if errors.Is(err, campaign.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "campaign not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "delete failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"outcome": string(outcome)})
+}
+
 type campaignStatsResp struct {
 	CampaignID     int64   `json:"campaign_id"`
 	TotalCalls     int     `json:"total_calls"`
