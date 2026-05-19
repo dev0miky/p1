@@ -25,31 +25,30 @@ type tenantScripts struct {
 }
 
 type createScriptRequest struct {
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
-	Type        string  `json:"type"`
-	Body        string  `json:"body"`
-}
-
-type updateScriptRequest struct {
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
-	Type        string  `json:"type"`
-	Body        *string `json:"body"`
+	Name        string   `json:"name"`
+	Description *string  `json:"description"`
+	Type        string   `json:"type"`
+	Body        string   `json:"body"`
+	Tags        []string `json:"tags"`
 }
 
 type scriptResponse struct {
-	ID          int64   `json:"id"`
-	TenantID    int64   `json:"tenant_id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description,omitempty"`
-	Type        string  `json:"type"`
-	Body        string  `json:"body"`
-	CreatedAt   string  `json:"created_at"`
-	UpdatedAt   string  `json:"updated_at"`
+	ID          int64    `json:"id"`
+	TenantID    int64    `json:"tenant_id"`
+	Name        string   `json:"name"`
+	Description *string  `json:"description,omitempty"`
+	Type        string   `json:"type"`
+	Body        string   `json:"body"`
+	Tags        []string `json:"tags"`
+	CreatedAt   string   `json:"created_at"`
+	UpdatedAt   string   `json:"updated_at"`
 }
 
 func scriptToResponse(s script.Script) scriptResponse {
+	tags := s.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 	return scriptResponse{
 		ID:          s.ID,
 		TenantID:    s.TenantID,
@@ -57,6 +56,7 @@ func scriptToResponse(s script.Script) scriptResponse {
 		Description: s.Description,
 		Type:        string(s.Type),
 		Body:        s.Body,
+		Tags:        tags,
 		CreatedAt:   s.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:   s.UpdatedAt.Format(time.RFC3339),
 	}
@@ -88,6 +88,7 @@ func (a *tenantScripts) create(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 		Type:        script.Type(req.Type),
 		Body:        req.Body,
+		Tags:        req.Tags,
 	}
 	var created script.Script
 	err := db.WithCtx(r.Context(), a.repo.Pool(), db.Ctx{Role: claims.Role, TenantID: tid, UserID: claims.UserID}, func(tx pgx.Tx) error {
@@ -170,12 +171,29 @@ func (a *tenantScripts) update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
-	var req updateScriptRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	if req.Type != "" && !script.ValidType(req.Type) {
+	patch := script.UpdatePatch{}
+	if v, ok := raw["name"]; ok {
+		_ = json.Unmarshal(v, &patch.Name)
+	}
+	if v, ok := raw["description"]; ok {
+		_ = json.Unmarshal(v, &patch.Description)
+	}
+	if v, ok := raw["type"]; ok {
+		_ = json.Unmarshal(v, &patch.Type)
+	}
+	if v, ok := raw["body"]; ok {
+		_ = json.Unmarshal(v, &patch.Body)
+	}
+	if v, ok := raw["tags"]; ok {
+		patch.SetTags = true
+		_ = json.Unmarshal(v, &patch.Tags)
+	}
+	if patch.Type != "" && !script.ValidType(patch.Type) {
 		writeError(w, http.StatusBadRequest, "invalid type")
 		return
 	}
@@ -188,9 +206,7 @@ func (a *tenantScripts) update(w http.ResponseWriter, r *http.Request) {
 	var out script.Script
 	err = db.WithCtx(r.Context(), a.repo.Pool(), db.Ctx{Role: claims.Role, TenantID: tid, UserID: claims.UserID}, func(tx pgx.Tx) error {
 		var err error
-		out, err = a.sRepo.UpdateTx(r.Context(), tx, id, script.UpdatePatch{
-			Name: req.Name, Description: req.Description, Type: req.Type, Body: req.Body,
-		})
+		out, err = a.sRepo.UpdateTx(r.Context(), tx, id, patch)
 		return err
 	})
 	if errors.Is(err, script.ErrNotFound) {

@@ -25,21 +25,27 @@ type tenantLeadLists struct {
 }
 
 type listResponse struct {
-	ID        int64   `json:"id"`
-	TenantID  int64   `json:"tenant_id"`
-	Name      string  `json:"name"`
-	Source    *string `json:"source,omitempty"`
-	LeadCount int     `json:"lead_count"`
-	CreatedAt string  `json:"created_at"`
-	UpdatedAt string  `json:"updated_at"`
+	ID        int64    `json:"id"`
+	TenantID  int64    `json:"tenant_id"`
+	Name      string   `json:"name"`
+	Source    *string  `json:"source,omitempty"`
+	Tags      []string `json:"tags"`
+	LeadCount int      `json:"lead_count"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
 }
 
 func listToResponse(l lead.List, count int) listResponse {
+	tags := l.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 	return listResponse{
 		ID:        l.ID,
 		TenantID:  l.TenantID,
 		Name:      l.Name,
 		Source:    l.Source,
+		Tags:      tags,
 		LeadCount: count,
 		CreatedAt: l.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: l.UpdatedAt.Format(time.RFC3339),
@@ -48,8 +54,9 @@ func listToResponse(l lead.List, count int) listResponse {
 
 func (a *tenantLeadLists) create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name   string  `json:"name"`
-		Source *string `json:"source"`
+		Name   string   `json:"name"`
+		Source *string  `json:"source"`
+		Tags   []string `json:"tags"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json")
@@ -68,7 +75,7 @@ func (a *tenantLeadLists) create(w http.ResponseWriter, r *http.Request) {
 	var created lead.List
 	err := db.WithCtx(r.Context(), a.repo.Pool(), db.Ctx{Role: claims.Role, TenantID: tid, UserID: claims.UserID}, func(tx pgx.Tx) error {
 		var err error
-		created, err = a.lRepo.CreateListTx(r.Context(), tx, lead.List{TenantID: tid, Name: req.Name, Source: req.Source})
+		created, err = a.lRepo.CreateListTx(r.Context(), tx, lead.List{TenantID: tid, Name: req.Name, Source: req.Source, Tags: req.Tags})
 		if err != nil {
 			return err
 		}
@@ -150,13 +157,21 @@ func (a *tenantLeadLists) update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
-	var req struct {
-		Name   string `json:"name"`
-		Source string `json:"source"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var rawBody map[string]json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&rawBody); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json")
 		return
+	}
+	upd := lead.ListUpdate{}
+	if v, ok := rawBody["name"]; ok {
+		_ = json.Unmarshal(v, &upd.Name)
+	}
+	if v, ok := rawBody["source"]; ok {
+		_ = json.Unmarshal(v, &upd.Source)
+	}
+	if v, ok := rawBody["tags"]; ok {
+		upd.SetTags = true
+		_ = json.Unmarshal(v, &upd.Tags)
 	}
 	claims, _ := auth.ClaimsFromContext(r.Context())
 	tid := claims.TenantID
@@ -167,7 +182,7 @@ func (a *tenantLeadLists) update(w http.ResponseWriter, r *http.Request) {
 	var out lead.List
 	err = db.WithCtx(r.Context(), a.repo.Pool(), db.Ctx{Role: claims.Role, TenantID: tid, UserID: claims.UserID}, func(tx pgx.Tx) error {
 		var err error
-		out, err = a.lRepo.UpdateListTx(r.Context(), tx, id, req.Name, req.Source)
+		out, err = a.lRepo.UpdateListTx(r.Context(), tx, id, upd)
 		return err
 	})
 	if errors.Is(err, lead.ErrNotFound) {

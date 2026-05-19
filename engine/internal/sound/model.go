@@ -24,6 +24,7 @@ type Sound struct {
 	DurationMS  *int
 	SHA256      *string
 	Status      Status
+	Tags        []string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

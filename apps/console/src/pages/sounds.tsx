@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useApiMutation, useApiQuery } from "@/lib/hooks";
 import { Button, EmptyState, ErrorBanner, PageHeader } from "@/components/ui";
 import { Table, type Column } from "@/components/table";
+import { TagInput, TagChips } from "@/components/tags";
 import { ApiError, apiUpload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { toast } from "@/lib/toast";
@@ -16,6 +17,7 @@ interface Sound {
   size_bytes: number;
   duration_ms?: number;
   status: "pending" | "ready" | "failed";
+  tags: string[];
   created_at: string;
 }
 
@@ -66,16 +68,22 @@ export function SoundsPage() {
     {
       key: "size",
       header: "Size",
-      width: "0.8fr",
+      width: "0.7fr",
       align: "right",
       sortable: true,
       sortValue: (s) => s.size_bytes,
       render: (s) => <span className="data-cell text-ink-900">{fmtSize(s.size_bytes)}</span>,
     },
     {
+      key: "tags",
+      header: "Tags",
+      width: "1.2fr",
+      render: (s) => (s.tags?.length ? <TagChips tags={s.tags} max={3} /> : <span className="text-ink-700">—</span>),
+    },
+    {
       key: "added",
       header: "Added",
-      width: "1.2fr",
+      width: "1.1fr",
       sortable: true,
       sortValue: (s) => s.created_at,
       render: (s) => (
@@ -128,6 +136,7 @@ function DropZone({ onUploaded }: { onUploaded: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [hover, setHover] = useState(false);
   const [name, setName] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -165,10 +174,12 @@ function DropZone({ onUploaded }: { onUploaded: () => void }) {
       const fd = new FormData();
       fd.set("name", name.trim());
       fd.set("file", file);
+      if (tags.length > 0) fd.set("tags", tags.join(","));
       const created = await apiUpload<Sound>("/tenant/sounds/", fd, { token });
       toast.success("sound uploaded", { description: `${created.name} · ${fmtSize(created.size_bytes)}` });
       setFile(null);
       setName("");
+      setTags([]);
       if (inputRef.current) inputRef.current.value = "";
       onUploaded();
     } catch (e) {
@@ -225,31 +236,38 @@ function DropZone({ onUploaded }: { onUploaded: () => void }) {
       </div>
 
       {file && (
-        <div className="mt-6 grid grid-cols-[1fr_auto] gap-3 items-end">
-          <div>
-            <label className="block field-label mb-2">name</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="campaign-prompt-v1"
-              className="w-full h-11 bg-transparent border-b border-ink-400 px-0 text-ink-950 placeholder:text-ink-600 focus:border-phosphor transition-colors font-mono"
-            />
+        <div className="mt-6 space-y-4">
+          <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+            <div>
+              <label className="block field-label mb-2">name</label>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="campaign-prompt-v1"
+                className="w-full h-11 bg-transparent border-b border-ink-400 px-0 text-ink-950 placeholder:text-ink-600 focus:border-phosphor transition-colors font-mono"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setFile(null);
+                  setName("");
+                  setTags([]);
+                  if (inputRef.current) inputRef.current.value = "";
+                }}
+                className="font-mono text-2xs uppercase tracking-widest text-ink-700 hover:text-ink-950"
+              >
+                cancel
+              </button>
+              <Button onClick={submit} disabled={busy}>
+                {busy ? "uploading..." : "upload"}
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setFile(null);
-                setName("");
-                if (inputRef.current) inputRef.current.value = "";
-              }}
-              className="font-mono text-2xs uppercase tracking-widest text-ink-700 hover:text-ink-950"
-            >
-              cancel
-            </button>
-            <Button onClick={submit} disabled={busy}>
-              {busy ? "uploading..." : "upload"}
-            </Button>
+          <div>
+            <label className="block field-label mb-2">tags</label>
+            <TagInput value={tags} onChange={setTags} placeholder="greeting, voicemail, spring" />
           </div>
         </div>
       )}
