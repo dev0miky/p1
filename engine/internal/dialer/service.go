@@ -476,16 +476,20 @@ func (s *Service) pickPress1(ctx context.Context, tenantID, campaignID int64) pr
 	}
 	var sc *campaign.AttachedScript
 	for i := range scripts {
-		if scripts[i].Type == "press1" && scripts[i].TransferTo != nil && *scripts[i].TransferTo != "" {
-			sc = &scripts[i]
-			break
+		if scripts[i].Type != "press1" {
+			continue
 		}
+		if resolveBridgeTarget(&scripts[i]) == "" {
+			continue
+		}
+		sc = &scripts[i]
+		break
 	}
 	if sc == nil || sc.GreetingFileKey == nil || sc.GreetingTenantID == nil {
 		return press1Config{}
 	}
 	cfg := press1Config{
-		transferTo:    *sc.TransferTo,
+		transferTo:    resolveBridgeTarget(sc),
 		greetingPath:  s.soundPath(*sc.GreetingTenantID, *sc.GreetingFileKey),
 		bridgeDigit:   sc.BridgeDigit,
 		waitTimeoutMS: sc.WaitTimeoutMS,
@@ -507,6 +511,16 @@ func (s *Service) pickPress1(ctx context.Context, tenantID, campaignID int64) pr
 
 func (s *Service) soundPath(tenantID int64, fileKey string) string {
 	return s.cfg.SoundRoot + "/" + strconv.FormatInt(tenantID, 10) + "/" + fileKey
+}
+
+func resolveBridgeTarget(sc *campaign.AttachedScript) string {
+	if sc.AgentDialString != nil && *sc.AgentDialString != "" {
+		return *sc.AgentDialString
+	}
+	if sc.TransferTo != nil && *sc.TransferTo != "" {
+		return *sc.TransferTo
+	}
+	return ""
 }
 
 func (s *Service) failCall(ctx context.Context, tenantID int64, uuid, reason string) {

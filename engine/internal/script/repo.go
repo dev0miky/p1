@@ -11,7 +11,7 @@ type Repo struct{}
 
 func NewRepo() *Repo { return &Repo{} }
 
-const fields = `id, tenant_id, name, description, type, body, transfer_to,
+const fields = `id, tenant_id, name, description, type, body, transfer_to, external_agent_id,
   greeting_sound_id, pre_bridge_sound_id,
   bridge_digit, wait_timeout_ms, opt_out_digit,
   tags, created_at, updated_at`
@@ -19,7 +19,8 @@ const fields = `id, tenant_id, name, description, type, body, transfer_to,
 func scan(row pgx.Row, s *Script) error {
 	return row.Scan(
 		&s.ID, &s.TenantID, &s.Name, &s.Description, &s.Type, &s.Body,
-		&s.TransferTo, &s.GreetingSoundID, &s.PreBridgeSoundID,
+		&s.TransferTo, &s.ExternalAgentID,
+		&s.GreetingSoundID, &s.PreBridgeSoundID,
 		&s.BridgeDigit, &s.WaitTimeoutMS, &s.OptOutDigit,
 		&s.Tags, &s.CreatedAt, &s.UpdatedAt,
 	)
@@ -38,13 +39,13 @@ func (r *Repo) CreateTx(ctx context.Context, tx pgx.Tx, s Script) (Script, error
 	var out Script
 	row := tx.QueryRow(ctx, `
 		INSERT INTO scripts (
-		  tenant_id, name, description, type, body, transfer_to,
+		  tenant_id, name, description, type, body, transfer_to, external_agent_id,
 		  greeting_sound_id, pre_bridge_sound_id,
 		  bridge_digit, wait_timeout_ms, opt_out_digit,
 		  tags
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING `+fields,
-		s.TenantID, s.Name, s.Description, s.Type, s.Body, s.TransferTo,
+		s.TenantID, s.Name, s.Description, s.Type, s.Body, s.TransferTo, s.ExternalAgentID,
 		s.GreetingSoundID, s.PreBridgeSoundID,
 		s.BridgeDigit, s.WaitTimeoutMS, s.OptOutDigit,
 		s.Tags,
@@ -86,6 +87,8 @@ type UpdatePatch struct {
 	Body                *string
 	TransferTo          *string
 	SetTransferTo       bool
+	ExternalAgentID     *int64
+	SetExternalAgentID  bool
 	GreetingSoundID     *int64
 	SetGreetingSoundID  bool
 	PreBridgeSoundID    *int64
@@ -115,17 +118,19 @@ func (r *Repo) UpdateTx(ctx context.Context, tx pgx.Tx, id int64, patch UpdatePa
 		  type                = COALESCE(NULLIF($3, ''), type),
 		  body                = COALESCE($4, body),
 		  transfer_to         = CASE WHEN $5::boolean  THEN $6  ELSE transfer_to         END,
-		  greeting_sound_id   = CASE WHEN $7::boolean  THEN $8  ELSE greeting_sound_id   END,
-		  pre_bridge_sound_id = CASE WHEN $9::boolean  THEN $10 ELSE pre_bridge_sound_id END,
-		  bridge_digit        = COALESCE(NULLIF($11, ''), bridge_digit),
-		  wait_timeout_ms     = COALESCE($12, wait_timeout_ms),
-		  opt_out_digit       = CASE WHEN $13::boolean THEN $14 ELSE opt_out_digit       END,
-		  tags                = COALESCE($15, tags),
+		  external_agent_id   = CASE WHEN $7::boolean  THEN $8  ELSE external_agent_id   END,
+		  greeting_sound_id   = CASE WHEN $9::boolean  THEN $10 ELSE greeting_sound_id   END,
+		  pre_bridge_sound_id = CASE WHEN $11::boolean THEN $12 ELSE pre_bridge_sound_id END,
+		  bridge_digit        = COALESCE(NULLIF($13, ''), bridge_digit),
+		  wait_timeout_ms     = COALESCE($14, wait_timeout_ms),
+		  opt_out_digit       = CASE WHEN $15::boolean THEN $16 ELSE opt_out_digit       END,
+		  tags                = COALESCE($17, tags),
 		  updated_at          = now()
-		WHERE id = $16
+		WHERE id = $18
 		RETURNING `+fields,
 		patch.Name, patch.Description, patch.Type, patch.Body,
 		patch.SetTransferTo, patch.TransferTo,
+		patch.SetExternalAgentID, patch.ExternalAgentID,
 		patch.SetGreetingSoundID, patch.GreetingSoundID,
 		patch.SetPreBridgeSoundID, patch.PreBridgeSoundID,
 		patch.BridgeDigit, patch.WaitTimeoutMS,

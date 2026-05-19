@@ -35,6 +35,7 @@ type createScriptRequest struct {
 	Type             string   `json:"type"`
 	Body             string   `json:"body"`
 	TransferTo       *string  `json:"transfer_to"`
+	ExternalAgentID  *int64   `json:"external_agent_id"`
 	GreetingSoundID  *int64   `json:"greeting_sound_id"`
 	PreBridgeSoundID *int64   `json:"pre_bridge_sound_id"`
 	BridgeDigit      string   `json:"bridge_digit"`
@@ -51,6 +52,7 @@ type scriptResponse struct {
 	Type             string   `json:"type"`
 	Body             string   `json:"body"`
 	TransferTo       *string  `json:"transfer_to,omitempty"`
+	ExternalAgentID  *int64   `json:"external_agent_id,omitempty"`
 	GreetingSoundID  *int64   `json:"greeting_sound_id,omitempty"`
 	PreBridgeSoundID *int64   `json:"pre_bridge_sound_id,omitempty"`
 	BridgeDigit      string   `json:"bridge_digit"`
@@ -74,6 +76,7 @@ func scriptToResponse(s script.Script) scriptResponse {
 		Type:             string(s.Type),
 		Body:             s.Body,
 		TransferTo:       s.TransferTo,
+		ExternalAgentID:  s.ExternalAgentID,
 		GreetingSoundID:  s.GreetingSoundID,
 		PreBridgeSoundID: s.PreBridgeSoundID,
 		BridgeDigit:      s.BridgeDigit,
@@ -144,6 +147,7 @@ func (a *tenantScripts) create(w http.ResponseWriter, r *http.Request) {
 		Type:             script.Type(req.Type),
 		Body:             req.Body,
 		TransferTo:       req.TransferTo,
+		ExternalAgentID:  req.ExternalAgentID,
 		GreetingSoundID:  req.GreetingSoundID,
 		PreBridgeSoundID: req.PreBridgeSoundID,
 		BridgeDigit:      req.BridgeDigit,
@@ -270,6 +274,10 @@ func (a *tenantScripts) update(w http.ResponseWriter, r *http.Request) {
 	if v, ok := raw["pre_bridge_sound_id"]; ok {
 		patch.SetPreBridgeSoundID = true
 		_ = json.Unmarshal(v, &patch.PreBridgeSoundID)
+	}
+	if v, ok := raw["external_agent_id"]; ok {
+		patch.SetExternalAgentID = true
+		_ = json.Unmarshal(v, &patch.ExternalAgentID)
 	}
 	if v, ok := raw["bridge_digit"]; ok {
 		_ = json.Unmarshal(v, &patch.BridgeDigit)

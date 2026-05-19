@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
 import { useApiMutation, useApiQuery } from "@/lib/hooks";
 import {
@@ -24,6 +25,7 @@ interface Script {
   type: ScriptType;
   body: string;
   transfer_to?: string | null;
+  external_agent_id?: number | null;
   greeting_sound_id?: number | null;
   pre_bridge_sound_id?: number | null;
   bridge_digit: string;
@@ -32,6 +34,16 @@ interface Script {
   tags: string[];
   created_at: string;
   updated_at: string;
+}
+
+interface ExternalAgentLite {
+  id: number;
+  name: string;
+  dial_string: string;
+}
+
+interface ExternalAgentsResp {
+  external_agents: ExternalAgentLite[];
 }
 
 interface ListResp {
@@ -55,7 +67,7 @@ interface FormState {
   description: string;
   type: ScriptType;
   body: string;
-  transferTo: string;
+  externalAgentID: number | null;
   greetingSoundID: number | null;
   preBridgeSoundID: number | null;
   bridgeDigit: string;
@@ -71,7 +83,7 @@ function emptyForm(): FormState {
     description: "",
     type: "press1",
     body: "",
-    transferTo: "",
+    externalAgentID: null,
     greetingSoundID: null,
     preBridgeSoundID: null,
     bridgeDigit: "1",
@@ -88,7 +100,7 @@ function fromScript(s: Script): FormState {
     description: s.description ?? "",
     type: s.type === "survey" || s.type === "custom" ? "press1" : s.type,
     body: s.body,
-    transferTo: s.transfer_to ?? "",
+    externalAgentID: s.external_agent_id ?? null,
     greetingSoundID: s.greeting_sound_id ?? null,
     preBridgeSoundID: s.pre_bridge_sound_id ?? null,
     bridgeDigit: s.bridge_digit || "1",
@@ -105,6 +117,7 @@ interface ScriptPayload {
   type?: string;
   body?: string;
   transfer_to?: string | null;
+  external_agent_id?: number | null;
   greeting_sound_id?: number | null;
   pre_bridge_sound_id?: number | null;
   bridge_digit?: string;
@@ -120,7 +133,8 @@ function toPayload(f: FormState, isCreate: boolean): ScriptPayload {
     type: f.type,
     body: f.body,
     tags: f.tags,
-    transfer_to: isPress1 ? f.transferTo || null : null,
+    transfer_to: null,
+    external_agent_id: isPress1 ? f.externalAgentID : null,
     greeting_sound_id: f.greetingSoundID,
     pre_bridge_sound_id: isPress1 ? f.preBridgeSoundID : null,
     bridge_digit: isPress1 ? f.bridgeDigit : "1",
@@ -234,8 +248,8 @@ export function ScriptsPage() {
 function FlowSummary({ script }: { script: Script }) {
   if (script.type === "press1") {
     const hasGreeting = script.greeting_sound_id !== null && script.greeting_sound_id !== undefined;
-    const hasTransfer = !!script.transfer_to;
-    if (!hasGreeting || !hasTransfer) {
+    const hasTarget = !!script.external_agent_id || !!script.transfer_to;
+    if (!hasGreeting || !hasTarget) {
       return <span className="font-mono text-2xs uppercase tracking-widest text-danger">incomplete</span>;
     }
     const bridge = script.bridge_digit || "1";
@@ -461,6 +475,8 @@ function ScriptForm({
 function FlowBuilder({ form, onChange }: { form: FormState; onChange: (f: FormState) => void }) {
   const sounds = useApiQuery<SoundsResp>(["sounds"], "/tenant/sounds/");
   const soundList = sounds.data?.sounds ?? [];
+  const agents = useApiQuery<ExternalAgentsResp>(["external-agents"], "/tenant/external-agents/");
+  const agentList = agents.data?.external_agents ?? [];
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => onChange({ ...form, [k]: v });
 
   const [showPreBridge, setShowPreBridge] = useState(form.preBridgeSoundID !== null);
@@ -545,18 +561,14 @@ function FlowBuilder({ form, onChange }: { form: FormState; onChange: (f: FormSt
                 )}
                 <div>
                   <div className="font-mono text-2xs uppercase tracking-widest text-ink-700 mb-1">
-                    bridge target
+                    bridge to agent
                   </div>
-                  <Input
-                    value={form.transferTo}
-                    onChange={(e) => set("transferTo", e.target.value)}
-                    className="font-mono text-sm"
-                    placeholder="sofia/gateway/voxtelesys/+15551234567"
-                    required
+                  <AgentPicker
+                    value={form.externalAgentID}
+                    onChange={(id) => set("externalAgentID", id)}
+                    agents={agentList}
+                    loading={agents.isLoading}
                   />
-                  <p className="mt-1 font-mono text-2xs text-ink-700">
-                    sip dial-string · external pstn via gateway, or internal ext like <span className="text-ink-900">1001@tenant.sip.internal</span>
-                  </p>
                 </div>
               </div>
             </FlowStep>
@@ -691,6 +703,56 @@ function DigitSelect({ value, onChange }: { value: string; onChange: (d: string)
         </option>
       ))}
     </select>
+  );
+}
+
+function AgentPicker({
+  value,
+  onChange,
+  agents,
+  loading,
+}: {
+  value: number | null;
+  onChange: (id: number | null) => void;
+  agents: ExternalAgentLite[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <p className="font-mono text-2xs uppercase tracking-widest text-ink-700">loading agents…</p>
+    );
+  }
+  if (agents.length === 0) {
+    return (
+      <p className="font-mono text-2xs uppercase tracking-widest text-danger">
+        no agents in library —{" "}
+        <Link to="/agents" className="underline text-phosphor hover:text-phosphor-glow">
+          add one in Agents
+        </Link>{" "}
+        first
+      </p>
+    );
+  }
+  const selected = agents.find((a) => a.id === value);
+  return (
+    <div className="space-y-1">
+      <select
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value ? parseInt(e.target.value, 10) : null)}
+        required
+        className="w-full h-10 bg-ink-100 border border-ink-400 px-3 font-mono text-sm text-ink-950 focus:outline-none focus:border-phosphor"
+      >
+        <option value="">— pick an agent —</option>
+        {agents.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name}
+          </option>
+        ))}
+      </select>
+      {selected && (
+        <p className="font-mono text-2xs text-phosphor truncate">→ {selected.dial_string}</p>
+      )}
+    </div>
   );
 }
 

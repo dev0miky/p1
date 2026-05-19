@@ -166,6 +166,8 @@ type AttachedScript struct {
 	ScriptName        string
 	Type              string
 	TransferTo        *string
+	ExternalAgentID   *int64
+	AgentDialString   *string
 	GreetingSoundID   *int64
 	GreetingFileKey   *string
 	GreetingTenantID  *int64
@@ -246,13 +248,15 @@ func (r *Repo) DetachScriptTx(ctx context.Context, tx pgx.Tx, campaignID, script
 
 func (r *Repo) ListAttachedScriptsTx(ctx context.Context, tx pgx.Tx, campaignID int64) ([]AttachedScript, error) {
 	rows, err := tx.Query(ctx, `
-		SELECT cs.script_id, s.name, s.type, s.transfer_to,
+		SELECT cs.script_id, s.name, s.type,
+		       s.transfer_to, s.external_agent_id, ea.dial_string,
 		       s.greeting_sound_id,   gs.file_key,  gs.tenant_id,
 		       s.pre_bridge_sound_id, pbs.file_key, pbs.tenant_id,
 		       s.bridge_digit, s.wait_timeout_ms, s.opt_out_digit,
 		       cs.attached_at::text
 		FROM campaign_scripts cs
 		JOIN scripts s ON s.id = cs.script_id
+		LEFT JOIN external_agents ea ON ea.id = s.external_agent_id
 		LEFT JOIN sounds gs  ON gs.id  = s.greeting_sound_id
 		LEFT JOIN sounds pbs ON pbs.id = s.pre_bridge_sound_id
 		WHERE cs.campaign_id = $1
@@ -266,7 +270,8 @@ func (r *Repo) ListAttachedScriptsTx(ctx context.Context, tx pgx.Tx, campaignID 
 	for rows.Next() {
 		var a AttachedScript
 		if err := rows.Scan(
-			&a.ScriptID, &a.ScriptName, &a.Type, &a.TransferTo,
+			&a.ScriptID, &a.ScriptName, &a.Type,
+			&a.TransferTo, &a.ExternalAgentID, &a.AgentDialString,
 			&a.GreetingSoundID, &a.GreetingFileKey, &a.GreetingTenantID,
 			&a.PreBridgeSoundID, &a.PreBridgeFileKey, &a.PreBridgeTenantID,
 			&a.BridgeDigit, &a.WaitTimeoutMS, &a.OptOutDigit,

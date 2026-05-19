@@ -30,6 +30,7 @@ type Script struct {
 	Type             Type
 	Body             string
 	TransferTo       *string
+	ExternalAgentID  *int64
 	GreetingSoundID  *int64
 	PreBridgeSoundID *int64
 	BridgeDigit      string
