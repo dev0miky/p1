@@ -174,6 +174,14 @@ type AttachedList struct {
 	AttachedAt string
 }
 
+type AttachedCallerID struct {
+	CallerIDID  int64
+	Name        string
+	E164Number  string
+	Attestation string
+	AttachedAt  string
+}
+
 func (r *Repo) AttachSoundTx(ctx context.Context, tx pgx.Tx, campaignID, soundID int64, role string) error {
 	_, err := tx.Exec(ctx, `
 		INSERT INTO campaign_sounds (campaign_id, sound_id, role) VALUES ($1, $2, $3)
@@ -277,6 +285,42 @@ func (r *Repo) DetachListTx(ctx context.Context, tx pgx.Tx, campaignID, listID i
 	}
 	_, err := tx.Exec(ctx, `DELETE FROM campaign_lists WHERE campaign_id=$1 AND list_id=$2`, campaignID, listID)
 	return err
+}
+
+func (r *Repo) AttachCallerIDTx(ctx context.Context, tx pgx.Tx, campaignID, callerIDID int64) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO campaign_caller_ids (campaign_id, caller_id_id) VALUES ($1, $2)
+		ON CONFLICT DO NOTHING
+	`, campaignID, callerIDID)
+	return err
+}
+
+func (r *Repo) DetachCallerIDTx(ctx context.Context, tx pgx.Tx, campaignID, callerIDID int64) error {
+	_, err := tx.Exec(ctx, `DELETE FROM campaign_caller_ids WHERE campaign_id=$1 AND caller_id_id=$2`, campaignID, callerIDID)
+	return err
+}
+
+func (r *Repo) ListAttachedCallerIDsTx(ctx context.Context, tx pgx.Tx, campaignID int64) ([]AttachedCallerID, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT cci.caller_id_id, c.name, c.e164_number, c.attestation, cci.attached_at::text
+		FROM campaign_caller_ids cci
+		JOIN caller_ids c ON c.id = cci.caller_id_id
+		WHERE cci.campaign_id = $1
+		ORDER BY c.id
+	`, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AttachedCallerID
+	for rows.Next() {
+		var a AttachedCallerID
+		if err := rows.Scan(&a.CallerIDID, &a.Name, &a.E164Number, &a.Attestation, &a.AttachedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
 
 func (r *Repo) ListAttachedListsTx(ctx context.Context, tx pgx.Tx, campaignID int64) ([]AttachedList, error) {

@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"p1/engine/internal/callerid"
 	"p1/engine/internal/campaign"
 	"p1/engine/internal/compliance"
 	"p1/engine/internal/db"
@@ -41,6 +42,7 @@ type Service struct {
 	campaign *campaign.Repo
 	lead     *lead.Repo
 	fsm      *fsm.Repo
+	cid      *callerid.Repo
 	pre      *compliance.Preflight
 	logger   *slog.Logger
 
@@ -73,6 +75,7 @@ func New(cfg Config) *Service {
 		campaign: campaign.NewRepo(),
 		lead:     lead.NewRepo(),
 		fsm:      fsm.NewRepo(),
+		cid:      callerid.NewRepo(),
 		pre:      compliance.New(dnc.NewRepo()),
 		logger:   cfg.Logger,
 		uuidLead: make(map[string]int64),
@@ -230,14 +233,19 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 	s.uuidTen[callUUID] = c.TenantID
 	s.mu.Unlock()
 
+	callerNumber, callerName := s.pickCallerID(ctx, c.TenantID, c.ID, l.Attempts)
+
 	vars := esl.OriginateVars{
 		"origination_uuid":             callUUID,
-		"origination_caller_id_number": "0000000000",
+		"origination_caller_id_number": callerNumber,
 		"tenant_id":                    strconv.FormatInt(c.TenantID, 10),
 		"campaign_id":                  strconv.FormatInt(c.ID, 10),
 		"lead_id":                      strconv.FormatInt(l.ID, 10),
 		"ignore_early_media":           "true",
 		"originate_timeout":            strconv.Itoa(int(s.cfg.OriginateTimeout.Seconds())),
+	}
+	if callerName != "" {
+		vars["origination_caller_id_name"] = callerName
 	}
 
 	dest := l.PhoneE164
@@ -359,6 +367,37 @@ func counterDeltaFor(to fsm.State) lead.CounterDelta {
 		return lead.CounterDelta{NWentToDNC: 1}
 	}
 	return lead.CounterDelta{}
+}
+
+// pickCallerID selects a caller_id from the campaign's attached pool using
+// the lead's attempt count as a round-robin index. Returns the E.164 number
+// and the display name. If the pool is empty, returns a placeholder + logs
+// at warn level so the operator notices missing config.
+func (s *Service) pickCallerID(ctx context.Context, tenantID, campaignID int64, attemptIdx int) (string, string) {
+	var pool []callerid.CallerID
+	err := db.WithCtx(ctx, s.cfg.Pool, db.Ctx{Role: "super_admin", TenantID: tenantID}, func(tx pgx.Tx) error {
+		var e error
+		pool, e = s.cid.ListForCampaignTx(ctx, tx, campaignID)
+		return e
+	})
+	if err != nil {
+		s.logger.Warn("caller_id pool lookup failed", "err", err, "campaign", campaignID)
+		return "+10000000000", ""
+	}
+	if len(pool) == 0 {
+		s.logger.Warn("no caller_ids attached to campaign — using placeholder; carriers with STIR/SHAKEN will reject", "campaign", campaignID)
+		return "+10000000000", ""
+	}
+	idx := attemptIdx
+	if idx < 0 {
+		idx = 0
+	}
+	pick := pool[idx%len(pool)]
+	displayName := ""
+	if pick.DisplayName != nil {
+		displayName = *pick.DisplayName
+	}
+	return pick.E164Number, displayName
 }
 
 func (s *Service) failCall(ctx context.Context, tenantID int64, uuid, reason string) {

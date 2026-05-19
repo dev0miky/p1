@@ -622,6 +622,7 @@ interface ResourceList {
   sounds: { sound_id: number; sound_name: string; role: string; attached_at: string }[];
   scripts: { script_id: number; script_name: string; type: string; attached_at: string }[];
   lists: { list_id: number; list_name: string; lead_count: number; attached_at: string }[];
+  caller_ids: { caller_id_id: number; name: string; e164_number: string; attestation: string; attached_at: string }[];
 }
 
 const SOUND_ROLES = ["greeting", "voicemail", "hold", "whisper", "opt_out_confirm"] as const;
@@ -637,7 +638,7 @@ function ResourcesPanel({ campaignId }: { campaignId: number }) {
     return <ErrorBanner>{(resQ.error as ApiError).message}</ErrorBanner>;
   }
 
-  const data = resQ.data ?? { sounds: [], scripts: [], lists: [] };
+  const data = resQ.data ?? { sounds: [], scripts: [], lists: [], caller_ids: [] };
   const grouped: Record<string, typeof data.sounds> = {};
   for (const role of SOUND_ROLES) grouped[role] = [];
   for (const s of data.sounds) (grouped[s.role] = grouped[s.role] ?? []).push(s);
@@ -686,6 +687,34 @@ function ResourcesPanel({ campaignId }: { campaignId: number }) {
             />
           ))}
           <AttachListBtn campaignId={campaignId} attached={data.lists.map((l) => l.list_id)} onAttached={refetch} />
+        </div>
+      </SubSection>
+
+      <SubSection label="caller ids — rotated per attempt">
+        <div className="flex flex-wrap items-center gap-2">
+          {data.caller_ids.length === 0 && (
+            <Dim>no caller ids attached — falls back to a placeholder number that real carriers reject</Dim>
+          )}
+          {data.caller_ids.map((c) => (
+            <Pill
+              key={c.caller_id_id}
+              label={c.name}
+              sub={`${c.e164_number}${c.attestation !== "none" ? ` · ${c.attestation}` : ""}`}
+              onRemove={async () => {
+                await fetch(`${apiBase}/tenant/campaigns/${campaignId}/resources/caller-ids/${c.caller_id_id}`, {
+                  method: "DELETE",
+                  headers: authHeaders(),
+                });
+                toast.success("caller id detached");
+                refetch();
+              }}
+            />
+          ))}
+          <AttachCallerIDBtn
+            campaignId={campaignId}
+            attached={data.caller_ids.map((c) => c.caller_id_id)}
+            onAttached={refetch}
+          />
         </div>
       </SubSection>
 
@@ -942,5 +971,56 @@ function PickerMenu({
         )}
       </div>
     </>
+  );
+}
+
+function AttachCallerIDBtn({
+  campaignId,
+  attached,
+  onAttached,
+}: {
+  campaignId: number;
+  attached: number[];
+  onAttached: () => void;
+}) {
+  const q = useApiQuery<{ caller_ids: { id: number; name: string; e164_number: string; attestation: string }[] }>(
+    ["caller-ids-for-attach"],
+    "/tenant/caller-ids/",
+  );
+  const [open, setOpen] = useState(false);
+  const options = (q.data?.caller_ids ?? []).filter((c) => !attached.includes(c.id));
+
+  async function attach(id: number) {
+    await fetch(`${apiBase}/tenant/campaigns/${campaignId}/resources/caller-ids`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ caller_id_id: id }),
+    });
+    toast.success("caller id attached");
+    onAttached();
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="h-7 inline-flex items-center px-3 font-mono text-2xs uppercase tracking-widest border border-dashed border-ink-500 text-ink-700 hover:text-ink-950 hover:border-ink-700 transition-colors"
+      >
+        + attach
+      </button>
+      {open && (
+        <PickerMenu
+          options={options.map((c) => ({
+            id: c.id,
+            label: c.name,
+            sub: c.attestation === "none" ? c.e164_number : `${c.e164_number} · ${c.attestation}`,
+          }))}
+          empty="no caller ids available — add one first"
+          onPick={attach}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
   );
 }

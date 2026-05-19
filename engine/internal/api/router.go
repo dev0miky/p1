@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/cors"
 
 	"p1/engine/internal/auth"
+	"p1/engine/internal/callerid"
 	"p1/engine/internal/campaign"
 	"p1/engine/internal/dnc"
 	"p1/engine/internal/fsm"
@@ -112,6 +113,8 @@ func NewRouter(cfg Config) http.Handler {
 		r.Delete("/{id}/resources/scripts/{script_id}", tenC.detachScript)
 		r.Post("/{id}/resources/lists", tenC.attachList)
 		r.Delete("/{id}/resources/lists/{list_id}", tenC.detachList)
+		r.Post("/{id}/resources/caller-ids", tenC.attachCallerID)
+		r.Delete("/{id}/resources/caller-ids/{caller_id_id}", tenC.detachCallerID)
 		r.Patch("/{id}", tenC.update)
 	})
 
@@ -215,6 +218,18 @@ func NewRouter(cfg Config) http.Handler {
 		r.Get("/{id}/download", tenSounds.download)
 		r.Patch("/{id}", tenSounds.update)
 		r.Delete("/{id}", tenSounds.delete)
+	})
+
+	tenCIDs := &tenantCallerIDs{repo: cfg.Repo, cRepo: callerid.NewRepo()}
+	r.Route("/tenant/caller-ids", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireTenant)
+		r.Use(auth.RequireAction(auth.ActionManageCampaigns))
+		r.Post("/", tenCIDs.create)
+		r.Get("/", tenCIDs.list)
+		r.Get("/{id}", tenCIDs.get)
+		r.Patch("/{id}", tenCIDs.update)
+		r.Delete("/{id}", tenCIDs.delete)
 	})
 
 	return r

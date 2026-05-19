@@ -26,7 +26,7 @@ func TestPool(t *testing.T) *pgxpool.Pool {
 	if err != nil {
 		t.Fatalf("sql open: %v", err)
 	}
-	if _, err := sqlDB.Exec(`DROP TABLE IF EXISTS goose_db_version, audit_log, call_events, call_state, opt_outs, dnc_entries, campaign_sounds, campaign_scripts, campaign_lists, lead_import_jobs, leads, lead_lists, scripts, sounds, campaigns, users, tenants CASCADE`); err != nil {
+	if _, err := sqlDB.Exec(`DROP TABLE IF EXISTS goose_db_version, audit_log, call_events, call_state, opt_outs, dnc_entries, campaign_sounds, campaign_scripts, campaign_lists, campaign_caller_ids, caller_ids, lead_import_jobs, leads, lead_lists, scripts, sounds, campaigns, users, tenants CASCADE`); err != nil {
 		t.Fatalf("drop: %v", err)
 	}
 	if _, err := sqlDB.Exec(`
