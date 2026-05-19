@@ -14,6 +14,7 @@ volumes:
   grafanadata:
   lokidata:
   sounds-data:
+  imports-data:
 
 services:
   postgres:
@@ -236,9 +237,11 @@ services:
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET_RECORDINGS: ${MINIO_BUCKET_RECORDINGS}
       SOUND_STORAGE_DIR: /data/sounds
+      IMPORT_STORAGE_DIR: /data/imports
       LOG_LEVEL: ${LOG_LEVEL}
     volumes:
       - sounds-data:/data/sounds
+      - imports-data:/data/imports
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks: [app]

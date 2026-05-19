@@ -13,6 +13,7 @@ import (
 
 	"p1/engine/internal/api"
 	"p1/engine/internal/auth"
+	"p1/engine/internal/leadimport"
 	"p1/engine/internal/tenant"
 	"p1/engine/internal/testutil"
 )
@@ -28,10 +29,18 @@ func newStack(t *testing.T) stack {
 	pool := testutil.TestPool(t)
 	repo := tenant.NewRepo(pool)
 	iss := auth.NewIssuer([]byte("test-secret-32-bytes-long-aaaaaa"), "p1", time.Hour)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	importStorage, err := leadimport.NewStorage(t.TempDir())
+	if err != nil {
+		t.Fatalf("import storage: %v", err)
+	}
 	router := api.NewRouter(api.Config{
-		Repo:   repo,
-		Issuer: iss,
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Repo:          repo,
+		Issuer:        iss,
+		Logger:        logger,
+		ImportStorage: importStorage,
+		ImportRunner:  leadimport.NewRunner(pool, importStorage, logger),
 	})
 	return stack{router: router, iss: iss, repo: repo}
 }
