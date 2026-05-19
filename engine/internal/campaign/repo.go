@@ -162,11 +162,17 @@ type AttachedSound struct {
 }
 
 type AttachedScript struct {
-	ScriptID   int64
-	ScriptName string
-	Type       string
-	TransferTo *string
-	AttachedAt string
+	ScriptID          int64
+	ScriptName        string
+	Type              string
+	TransferTo        *string
+	GreetingSoundID   *int64
+	GreetingFileKey   *string
+	GreetingTenantID  *int64
+	PreBridgeSoundID  *int64
+	PreBridgeFileKey  *string
+	PreBridgeTenantID *int64
+	AttachedAt        string
 }
 
 type AttachedList struct {
@@ -237,9 +243,14 @@ func (r *Repo) DetachScriptTx(ctx context.Context, tx pgx.Tx, campaignID, script
 
 func (r *Repo) ListAttachedScriptsTx(ctx context.Context, tx pgx.Tx, campaignID int64) ([]AttachedScript, error) {
 	rows, err := tx.Query(ctx, `
-		SELECT cs.script_id, s.name, s.type, s.transfer_to, cs.attached_at::text
+		SELECT cs.script_id, s.name, s.type, s.transfer_to,
+		       s.greeting_sound_id,   gs.file_key,  gs.tenant_id,
+		       s.pre_bridge_sound_id, pbs.file_key, pbs.tenant_id,
+		       cs.attached_at::text
 		FROM campaign_scripts cs
 		JOIN scripts s ON s.id = cs.script_id
+		LEFT JOIN sounds gs  ON gs.id  = s.greeting_sound_id
+		LEFT JOIN sounds pbs ON pbs.id = s.pre_bridge_sound_id
 		WHERE cs.campaign_id = $1
 		ORDER BY cs.attached_at
 	`, campaignID)
@@ -250,7 +261,12 @@ func (r *Repo) ListAttachedScriptsTx(ctx context.Context, tx pgx.Tx, campaignID 
 	var out []AttachedScript
 	for rows.Next() {
 		var a AttachedScript
-		if err := rows.Scan(&a.ScriptID, &a.ScriptName, &a.Type, &a.TransferTo, &a.AttachedAt); err != nil {
+		if err := rows.Scan(
+			&a.ScriptID, &a.ScriptName, &a.Type, &a.TransferTo,
+			&a.GreetingSoundID, &a.GreetingFileKey, &a.GreetingTenantID,
+			&a.PreBridgeSoundID, &a.PreBridgeFileKey, &a.PreBridgeTenantID,
+			&a.AttachedAt,
+		); err != nil {
 			return nil, err
 		}
 		out = append(out, a)

@@ -243,7 +243,7 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 	s.mu.Unlock()
 
 	callerNumber, callerName := s.pickCallerID(ctx, c.TenantID, c.ID, l.Attempts)
-	transferTo, greetingPath := s.pickPress1(ctx, c.TenantID, c.ID)
+	p1 := s.pickPress1(ctx, c.TenantID, c.ID)
 
 	vars := esl.OriginateVars{
 		"origination_uuid":             callUUID,
@@ -265,9 +265,12 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 		dest = s.cfg.ForceDest
 	}
 	action := "&park"
-	if transferTo != "" && greetingPath != "" {
-		vars["greeting_sound"] = greetingPath
-		vars["transfer_to"] = transferTo
+	if p1.transferTo != "" && p1.greetingPath != "" {
+		vars["greeting_sound"] = p1.greetingPath
+		vars["transfer_to"] = p1.transferTo
+		if p1.preBridgePath != "" {
+			vars["pre_bridge_sound"] = p1.preBridgePath
+		}
 		action = "&lua(press1.lua)"
 	} else if s.cfg.TestPlayback != "" {
 		action = "&playback(" + s.cfg.TestPlayback + ")"
@@ -446,41 +449,45 @@ func (s *Service) pickCallerID(ctx context.Context, tenantID, campaignID int64, 
 	return pick.E164Number, displayName
 }
 
-func (s *Service) pickPress1(ctx context.Context, tenantID, campaignID int64) (transferTo, greetingPath string) {
+type press1Config struct {
+	transferTo    string
+	greetingPath  string
+	preBridgePath string
+}
+
+func (s *Service) pickPress1(ctx context.Context, tenantID, campaignID int64) press1Config {
 	var scripts []campaign.AttachedScript
-	var sounds []campaign.AttachedSound
 	err := db.WithCtx(ctx, s.cfg.Pool, db.Ctx{Role: "super_admin", TenantID: tenantID}, func(tx pgx.Tx) error {
 		var e error
 		scripts, e = s.campaign.ListAttachedScriptsTx(ctx, tx, campaignID)
-		if e != nil {
-			return e
-		}
-		sounds, e = s.campaign.ListAttachedSoundsTx(ctx, tx, campaignID)
 		return e
 	})
 	if err != nil {
-		s.logger.Warn("press1 resource lookup failed", "campaign", campaignID, "err", err)
-		return "", ""
+		s.logger.Warn("press1 script lookup failed", "campaign", campaignID, "err", err)
+		return press1Config{}
 	}
-	for _, sc := range scripts {
-		if sc.Type == "press1" && sc.TransferTo != nil && *sc.TransferTo != "" {
-			transferTo = *sc.TransferTo
+	var sc *campaign.AttachedScript
+	for i := range scripts {
+		if scripts[i].Type == "press1" && scripts[i].TransferTo != nil && *scripts[i].TransferTo != "" {
+			sc = &scripts[i]
 			break
 		}
 	}
-	if transferTo == "" {
-		return "", ""
+	if sc == nil || sc.GreetingFileKey == nil || sc.GreetingTenantID == nil {
+		return press1Config{}
 	}
-	for _, sn := range sounds {
-		if sn.Role == "greeting" {
-			greetingPath = s.cfg.SoundRoot + "/" + strconv.FormatInt(tenantID, 10) + "/" + sn.FileKey
-			break
-		}
+	cfg := press1Config{
+		transferTo:   *sc.TransferTo,
+		greetingPath: s.soundPath(*sc.GreetingTenantID, *sc.GreetingFileKey),
 	}
-	if greetingPath == "" {
-		return "", ""
+	if sc.PreBridgeFileKey != nil && sc.PreBridgeTenantID != nil {
+		cfg.preBridgePath = s.soundPath(*sc.PreBridgeTenantID, *sc.PreBridgeFileKey)
 	}
-	return transferTo, greetingPath
+	return cfg
+}
+
+func (s *Service) soundPath(tenantID int64, fileKey string) string {
+	return s.cfg.SoundRoot + "/" + strconv.FormatInt(tenantID, 10) + "/" + fileKey
 }
 
 func (s *Service) failCall(ctx context.Context, tenantID int64, uuid, reason string) {

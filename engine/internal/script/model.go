@@ -23,16 +23,18 @@ func ValidType(s string) bool {
 }
 
 type Script struct {
-	ID          int64
-	TenantID    int64
-	Name        string
-	Description *string
-	Type        Type
-	Body        string
-	TransferTo  *string
-	Tags        []string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID               int64
+	TenantID         int64
+	Name             string
+	Description      *string
+	Type             Type
+	Body             string
+	TransferTo       *string
+	GreetingSoundID  *int64
+	PreBridgeSoundID *int64
+	Tags             []string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 var ErrNotFound = errors.New("script not found")

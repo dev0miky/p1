@@ -11,10 +11,14 @@ type Repo struct{}
 
 func NewRepo() *Repo { return &Repo{} }
 
-const fields = `id, tenant_id, name, description, type, body, transfer_to, tags, created_at, updated_at`
+const fields = `id, tenant_id, name, description, type, body, transfer_to, greeting_sound_id, pre_bridge_sound_id, tags, created_at, updated_at`
 
 func scan(row pgx.Row, s *Script) error {
-	return row.Scan(&s.ID, &s.TenantID, &s.Name, &s.Description, &s.Type, &s.Body, &s.TransferTo, &s.Tags, &s.CreatedAt, &s.UpdatedAt)
+	return row.Scan(
+		&s.ID, &s.TenantID, &s.Name, &s.Description, &s.Type, &s.Body,
+		&s.TransferTo, &s.GreetingSoundID, &s.PreBridgeSoundID,
+		&s.Tags, &s.CreatedAt, &s.UpdatedAt,
+	)
 }
 
 func (r *Repo) CreateTx(ctx context.Context, tx pgx.Tx, s Script) (Script, error) {
@@ -23,10 +27,10 @@ func (r *Repo) CreateTx(ctx context.Context, tx pgx.Tx, s Script) (Script, error
 	}
 	var out Script
 	row := tx.QueryRow(ctx, `
-		INSERT INTO scripts (tenant_id, name, description, type, body, transfer_to, tags)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO scripts (tenant_id, name, description, type, body, transfer_to, greeting_sound_id, pre_bridge_sound_id, tags)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING `+fields,
-		s.TenantID, s.Name, s.Description, s.Type, s.Body, s.TransferTo, s.Tags,
+		s.TenantID, s.Name, s.Description, s.Type, s.Body, s.TransferTo, s.GreetingSoundID, s.PreBridgeSoundID, s.Tags,
 	)
 	return out, scan(row, &out)
 }
@@ -59,14 +63,18 @@ func (r *Repo) ListTx(ctx context.Context, tx pgx.Tx) ([]Script, error) {
 }
 
 type UpdatePatch struct {
-	Name          string
-	Description   *string
-	Type          string
-	Body          *string
-	TransferTo    *string
-	SetTransferTo bool
-	Tags          []string
-	SetTags       bool
+	Name                string
+	Description         *string
+	Type                string
+	Body                *string
+	TransferTo          *string
+	SetTransferTo       bool
+	GreetingSoundID     *int64
+	SetGreetingSoundID  bool
+	PreBridgeSoundID    *int64
+	SetPreBridgeSoundID bool
+	Tags                []string
+	SetTags             bool
 }
 
 func (r *Repo) UpdateTx(ctx context.Context, tx pgx.Tx, id int64, patch UpdatePatch) (Script, error) {
@@ -81,16 +89,22 @@ func (r *Repo) UpdateTx(ctx context.Context, tx pgx.Tx, id int64, patch UpdatePa
 	var out Script
 	row := tx.QueryRow(ctx, `
 		UPDATE scripts SET
-		  name        = COALESCE(NULLIF($1, ''), name),
-		  description = COALESCE($2, description),
-		  type        = COALESCE(NULLIF($3, ''), type),
-		  body        = COALESCE($4, body),
-		  transfer_to = CASE WHEN $5::boolean THEN $6 ELSE transfer_to END,
-		  tags        = COALESCE($7, tags),
-		  updated_at  = now()
-		WHERE id = $8
+		  name                = COALESCE(NULLIF($1, ''), name),
+		  description         = COALESCE($2, description),
+		  type                = COALESCE(NULLIF($3, ''), type),
+		  body                = COALESCE($4, body),
+		  transfer_to         = CASE WHEN $5::boolean THEN $6  ELSE transfer_to         END,
+		  greeting_sound_id   = CASE WHEN $7::boolean THEN $8  ELSE greeting_sound_id   END,
+		  pre_bridge_sound_id = CASE WHEN $9::boolean THEN $10 ELSE pre_bridge_sound_id END,
+		  tags                = COALESCE($11, tags),
+		  updated_at          = now()
+		WHERE id = $12
 		RETURNING `+fields,
-		patch.Name, patch.Description, patch.Type, patch.Body, patch.SetTransferTo, patch.TransferTo, tagsPtr, id,
+		patch.Name, patch.Description, patch.Type, patch.Body,
+		patch.SetTransferTo, patch.TransferTo,
+		patch.SetGreetingSoundID, patch.GreetingSoundID,
+		patch.SetPreBridgeSoundID, patch.PreBridgeSoundID,
+		tagsPtr, id,
 	)
 	err := scan(row, &out)
 	if errors.Is(err, pgx.ErrNoRows) {
