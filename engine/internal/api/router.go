@@ -117,6 +117,7 @@ func NewRouter(cfg Config) http.Handler {
 		r.Post("/{id}/resources/caller-ids", tenC.attachCallerID)
 		r.Delete("/{id}/resources/caller-ids/{caller_id_id}", tenC.detachCallerID)
 		r.Patch("/{id}", tenC.update)
+		r.Delete("/{id}", tenC.delete)
 	})
 
 	lRepo := lead.NewRepo()

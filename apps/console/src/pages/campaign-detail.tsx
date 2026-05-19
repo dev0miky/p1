@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import clsx from "clsx";
 import { useApiMutation, useApiQuery } from "@/lib/hooks";
@@ -128,6 +128,7 @@ function fmtAt(iso: string | undefined) {
 export function CampaignDetailPage() {
   const { campaignId } = useParams({ from: "/campaigns/$campaignId" });
   const id = parseInt(campaignId, 10);
+  const navigate = useNavigate();
 
   const campaignQ = useApiQuery<Campaign>(["campaign", id], `/tenant/campaigns/${id}`);
   const statsQ = useApiQuery<Stats>(["campaign-stats", id], `/tenant/campaigns/${id}/stats`);
@@ -149,6 +150,23 @@ export function CampaignDetailPage() {
     },
     onError: (e) => toast.error("toggle failed", { description: e.message }),
   });
+
+  const del = useApiMutation<{ outcome: "deleted" | "archived" }, void>(
+    `/tenant/campaigns/${id}`,
+    "DELETE",
+    {
+      invalidate: ["campaigns"],
+      onSuccess: (res) => {
+        if (res.outcome === "archived") {
+          toast.info("archived", { description: "campaign had call history — kept for audit" });
+        } else {
+          toast.success("deleted");
+        }
+        navigate({ to: "/campaigns" });
+      },
+      onError: (e) => toast.error("delete failed", { description: e.message }),
+    },
+  );
 
   if (campaignQ.isLoading || !campaignQ.data) {
     return (
@@ -210,6 +228,23 @@ export function CampaignDetailPage() {
           >
             {toggle.isPending ? "…" : isLive ? "▮▮ pause" : "▶ go live"}
           </Button>
+          <button
+            type="button"
+            onClick={() => {
+              if (isLive) {
+                toast.error("pause it first");
+                return;
+              }
+              if (confirm(`delete campaign "${c.name}"?\n\nif this campaign has call history it'll be archived (kept for audit). otherwise it's fully removed.`)) {
+                del.mutate();
+              }
+            }}
+            disabled={del.isPending || isLive}
+            className="h-9 px-3 font-mono text-2xs uppercase tracking-widest text-ink-700 hover:text-danger disabled:opacity-40 transition-colors"
+            title={isLive ? "pause first" : "delete or archive"}
+          >
+            {del.isPending ? "…" : "delete"}
+          </button>
         </div>
       </motion.div>
 
