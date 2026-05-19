@@ -29,6 +29,10 @@ if digit == "1" then
     session:hangup("CALL_REJECTED")
     return
   end
+  local pre_bridge = session:getVariable("pre_bridge_sound") or ""
+  if pre_bridge ~= "" then
+    session:execute("playback", pre_bridge)
+  end
   session:setVariable("press1_action", "transfer")
   session:execute("bridge", transfer_to)
 elseif digit == "9" then

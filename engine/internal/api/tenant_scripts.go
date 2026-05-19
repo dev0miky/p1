@@ -30,25 +30,29 @@ type tenantScripts struct {
 }
 
 type createScriptRequest struct {
-	Name        string   `json:"name"`
-	Description *string  `json:"description"`
-	Type        string   `json:"type"`
-	Body        string   `json:"body"`
-	TransferTo  *string  `json:"transfer_to"`
-	Tags        []string `json:"tags"`
+	Name             string   `json:"name"`
+	Description      *string  `json:"description"`
+	Type             string   `json:"type"`
+	Body             string   `json:"body"`
+	TransferTo       *string  `json:"transfer_to"`
+	GreetingSoundID  *int64   `json:"greeting_sound_id"`
+	PreBridgeSoundID *int64   `json:"pre_bridge_sound_id"`
+	Tags             []string `json:"tags"`
 }
 
 type scriptResponse struct {
-	ID          int64    `json:"id"`
-	TenantID    int64    `json:"tenant_id"`
-	Name        string   `json:"name"`
-	Description *string  `json:"description,omitempty"`
-	Type        string   `json:"type"`
-	Body        string   `json:"body"`
-	TransferTo  *string  `json:"transfer_to,omitempty"`
-	Tags        []string `json:"tags"`
-	CreatedAt   string   `json:"created_at"`
-	UpdatedAt   string   `json:"updated_at"`
+	ID               int64    `json:"id"`
+	TenantID         int64    `json:"tenant_id"`
+	Name             string   `json:"name"`
+	Description      *string  `json:"description,omitempty"`
+	Type             string   `json:"type"`
+	Body             string   `json:"body"`
+	TransferTo       *string  `json:"transfer_to,omitempty"`
+	GreetingSoundID  *int64   `json:"greeting_sound_id,omitempty"`
+	PreBridgeSoundID *int64   `json:"pre_bridge_sound_id,omitempty"`
+	Tags             []string `json:"tags"`
+	CreatedAt        string   `json:"created_at"`
+	UpdatedAt        string   `json:"updated_at"`
 }
 
 func scriptToResponse(s script.Script) scriptResponse {
@@ -57,16 +61,18 @@ func scriptToResponse(s script.Script) scriptResponse {
 		tags = []string{}
 	}
 	return scriptResponse{
-		ID:          s.ID,
-		TenantID:    s.TenantID,
-		Name:        s.Name,
-		Description: s.Description,
-		Type:        string(s.Type),
-		Body:        s.Body,
-		TransferTo:  s.TransferTo,
-		Tags:        tags,
-		CreatedAt:   s.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:   s.UpdatedAt.Format(time.RFC3339),
+		ID:               s.ID,
+		TenantID:         s.TenantID,
+		Name:             s.Name,
+		Description:      s.Description,
+		Type:             string(s.Type),
+		Body:             s.Body,
+		TransferTo:       s.TransferTo,
+		GreetingSoundID:  s.GreetingSoundID,
+		PreBridgeSoundID: s.PreBridgeSoundID,
+		Tags:             tags,
+		CreatedAt:        s.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:        s.UpdatedAt.Format(time.RFC3339),
 	}
 }
 
@@ -99,13 +105,15 @@ func (a *tenantScripts) create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s := script.Script{
-		TenantID:    tid,
-		Name:        req.Name,
-		Description: req.Description,
-		Type:        script.Type(req.Type),
-		Body:        req.Body,
-		TransferTo:  req.TransferTo,
-		Tags:        req.Tags,
+		TenantID:         tid,
+		Name:             req.Name,
+		Description:      req.Description,
+		Type:             script.Type(req.Type),
+		Body:             req.Body,
+		TransferTo:       req.TransferTo,
+		GreetingSoundID:  req.GreetingSoundID,
+		PreBridgeSoundID: req.PreBridgeSoundID,
+		Tags:             req.Tags,
 	}
 	var created script.Script
 	err := db.WithCtx(r.Context(), a.repo.Pool(), db.Ctx{Role: claims.Role, TenantID: tid, UserID: claims.UserID}, func(tx pgx.Tx) error {
@@ -218,6 +226,14 @@ func (a *tenantScripts) update(w http.ResponseWriter, r *http.Request) {
 				patch.TransferTo = &t
 			}
 		}
+	}
+	if v, ok := raw["greeting_sound_id"]; ok {
+		patch.SetGreetingSoundID = true
+		_ = json.Unmarshal(v, &patch.GreetingSoundID)
+	}
+	if v, ok := raw["pre_bridge_sound_id"]; ok {
+		patch.SetPreBridgeSoundID = true
+		_ = json.Unmarshal(v, &patch.PreBridgeSoundID)
 	}
 	if v, ok := raw["tags"]; ok {
 		patch.SetTags = true
