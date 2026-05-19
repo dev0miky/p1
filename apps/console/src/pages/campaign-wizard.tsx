@@ -16,6 +16,13 @@ interface Script {
   type: "press1" | "broadcast" | "survey" | "custom";
 }
 
+type Mode = "press1" | "broadcast";
+
+function modeFromScript(s: Script | undefined): Mode {
+  if (s && (s.type === "press1" || s.type === "broadcast")) return s.type;
+  return "broadcast";
+}
+
 interface ListRow {
   id: number;
   name: string;
@@ -30,9 +37,6 @@ interface Campaign {
   status: string;
 }
 
-const MODES = ["press1", "broadcast", "predictive", "preview"] as const;
-type Mode = (typeof MODES)[number];
-
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -45,7 +49,6 @@ export function CampaignWizard({ open, onClose, onCreated }: Props) {
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [name, setName] = useState("");
-  const [mode, setMode] = useState<Mode>("press1");
   const [dialRatio, setDialRatio] = useState("1.0");
   const [scriptId, setScriptId] = useState<number | null>(null);
   const [listIds, setListIds] = useState<Set<number>>(new Set());
@@ -55,10 +58,12 @@ export function CampaignWizard({ open, onClose, onCreated }: Props) {
   const scriptsQ = useApiQuery<{ scripts: Script[] }>(["scripts-wizard"], "/tenant/scripts/");
   const listsQ = useApiQuery<{ lists: ListRow[] }>(["lists-wizard"], "/tenant/lists/");
 
+  const pickedScript = (scriptsQ.data?.scripts ?? []).find((s) => s.id === scriptId);
+  const mode = modeFromScript(pickedScript);
+
   function reset() {
     setStep(1);
     setName("");
-    setMode("press1");
     setDialRatio("1.0");
     setScriptId(null);
     setListIds(new Set());
@@ -154,14 +159,7 @@ export function CampaignWizard({ open, onClose, onCreated }: Props) {
               <Header step={step} onClose={() => !submitting && close()} />
               <div className="flex-1 overflow-y-auto px-10 py-10">
                 {step === 1 && (
-                  <StepName
-                    name={name}
-                    setName={setName}
-                    mode={mode}
-                    setMode={setMode}
-                    dialRatio={dialRatio}
-                    setDialRatio={setDialRatio}
-                  />
+                  <StepName name={name} setName={setName} dialRatio={dialRatio} setDialRatio={setDialRatio} />
                 )}
                 {step === 2 && (
                   <StepScript
@@ -169,7 +167,6 @@ export function CampaignWizard({ open, onClose, onCreated }: Props) {
                     loading={scriptsQ.isLoading}
                     selected={scriptId}
                     onSelect={setScriptId}
-                    preferType={mode === "preview" || mode === "predictive" ? null : mode}
                   />
                 )}
                 {step === 3 && (
@@ -215,7 +212,7 @@ export function CampaignWizard({ open, onClose, onCreated }: Props) {
 }
 
 const STEPS = [
-  { n: 1, label: "name + mode" },
+  { n: 1, label: "name" },
   { n: 2, label: "script" },
   { n: 3, label: "lists" },
   { n: 4, label: "review" },
@@ -328,24 +325,14 @@ function Footer({
 function StepName({
   name,
   setName,
-  mode,
-  setMode,
   dialRatio,
   setDialRatio,
 }: {
   name: string;
   setName: (s: string) => void;
-  mode: Mode;
-  setMode: (m: Mode) => void;
   dialRatio: string;
   setDialRatio: (s: string) => void;
 }) {
-  const modeBlurb: Record<Mode, string> = {
-    press1: "answer, play prompt, transfer on DTMF 1. needs agents.",
-    broadcast: "answer, play prompt, hang up. no agents required.",
-    predictive: "dial ahead of agent capacity, statistical pacing. needs agents + tuning.",
-    preview: "agent sees lead first, clicks dial. low volume.",
-  };
   return (
     <div className="space-y-8 max-w-xl">
       <div>
@@ -358,29 +345,8 @@ function StepName({
           required
         />
       </div>
-      <div>
-        <Label hint="determines runtime behavior">mode</Label>
-        <div className="mt-2 grid grid-cols-4 gap-px bg-ink-400 border border-ink-400">
-          {MODES.map((m) => (
-            <button
-              type="button"
-              key={m}
-              onClick={() => setMode(m)}
-              className={clsx(
-                "px-3 h-11 font-mono text-2xs uppercase tracking-widest transition-colors",
-                mode === m
-                  ? "bg-phosphor text-ink-0"
-                  : "bg-ink-100 text-ink-800 hover:bg-ink-200 hover:text-ink-950",
-              )}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-        <p className="mt-3 font-mono text-2xs text-ink-700">{modeBlurb[mode]}</p>
-      </div>
       <div className="max-w-[14rem]">
-        <Label hint="lines per agent (predictive) / fixed (broadcast)">dial ratio</Label>
+        <Label hint="concurrent lines · fixed for now, agent-led pacing later">dial ratio</Label>
         <Input
           type="number"
           min="0.1"
@@ -391,6 +357,9 @@ function StepName({
           className="font-mono"
         />
       </div>
+      <p className="font-mono text-2xs text-ink-700">
+        mode is derived from the script you'll pick in the next step — press-1 if the script is press-1, broadcast otherwise.
+      </p>
     </div>
   );
 }
@@ -400,13 +369,11 @@ function StepScript({
   loading,
   selected,
   onSelect,
-  preferType,
 }: {
   scripts: Script[];
   loading: boolean;
   selected: number | null;
   onSelect: (id: number) => void;
-  preferType: string | null;
 }) {
   if (loading) {
     return <p className="font-mono text-2xs uppercase tracking-widest text-ink-700">loading scripts…</p>;
@@ -421,38 +388,16 @@ function StepScript({
       </div>
     );
   }
-  const matching = preferType ? scripts.filter((s) => s.type === preferType) : scripts;
-  const others = preferType ? scripts.filter((s) => s.type !== preferType) : [];
-
   return (
     <div className="space-y-6 max-w-2xl">
       <p className="font-mono text-2xs uppercase tracking-widest text-ink-700">
-        pick the IVR logic for this campaign
-        {preferType && (
-          <span> · matching <span className="text-ink-950">{preferType}</span></span>
-        )}
+        pick the IVR logic — script type also picks the campaign mode
       </p>
-
-      {matching.length > 0 && (
-        <div className="space-y-px bg-ink-400 border border-ink-400">
-          {matching.map((s) => (
-            <ScriptRow key={s.id} script={s} selected={selected === s.id} onClick={() => onSelect(s.id)} />
-          ))}
-        </div>
-      )}
-
-      {others.length > 0 && (
-        <details className="font-mono text-2xs">
-          <summary className="cursor-pointer uppercase tracking-widest text-ink-700 hover:text-ink-950">
-            other types ({others.length})
-          </summary>
-          <div className="mt-3 space-y-px bg-ink-400 border border-ink-400">
-            {others.map((s) => (
-              <ScriptRow key={s.id} script={s} selected={selected === s.id} onClick={() => onSelect(s.id)} />
-            ))}
-          </div>
-        </details>
-      )}
+      <div className="space-y-px bg-ink-400 border border-ink-400">
+        {scripts.map((s) => (
+          <ScriptRow key={s.id} script={s} selected={selected === s.id} onClick={() => onSelect(s.id)} />
+        ))}
+      </div>
     </div>
   );
 }
