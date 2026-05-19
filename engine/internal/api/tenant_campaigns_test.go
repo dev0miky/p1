@@ -338,3 +338,129 @@ func TestCampaignCallConstraintAcceptsValidRejectsInvalid(t *testing.T) {
 		t.Fatalf("bogus constraint: want 400, got %d", w.Code)
 	}
 }
+
+func TestCampaignAttachResources(t *testing.T) {
+	s := newStack(t)
+	ctx := context.Background()
+	tn, _ := s.repo.CreateTenantAsSuperAdmin(ctx, tenant.Tenant{Slug: "car", Name: "x", SIPDomain: "car.sip"})
+	tok := s.tokenFor(t, 1, tn.ID, "tenant_owner")
+
+	w := s.do(t, "POST", "/tenant/campaigns/", tok, map[string]any{"name": "c1", "mode": "press1"})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("camp: %d %s", w.Code, w.Body.String())
+	}
+	var c map[string]any
+	json.Unmarshal(w.Body.Bytes(), &c)
+	campID := int64(c["id"].(float64))
+
+	w = s.do(t, "POST", "/tenant/scripts/", tok, map[string]any{"name": "press1", "type": "press1", "body": "hi"})
+	var sc map[string]any
+	json.Unmarshal(w.Body.Bytes(), &sc)
+	scriptID := int64(sc["id"].(float64))
+
+	w = s.do(t, "POST", "/tenant/lists/", tok, map[string]any{"name": "list-a"})
+	var ll map[string]any
+	json.Unmarshal(w.Body.Bytes(), &ll)
+	listID := int64(ll["id"].(float64))
+
+	// Seed a sound directly via SQL since multipart upload needs file bytes.
+	var soundID int64
+	if err := db.WithCtx(ctx, s.repo.Pool(), db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			INSERT INTO sounds (tenant_id, name, file_key, mime_type, size_bytes)
+			VALUES ($1, 'greeting-wav', 'fake.wav', 'audio/wav', 1000) RETURNING id
+		`, tn.ID).Scan(&soundID)
+	}); err != nil {
+		t.Fatalf("seed sound: %v", err)
+	}
+
+	if w := s.do(t, "POST", "/tenant/campaigns/"+strconv.FormatInt(campID, 10)+"/resources/sounds", tok, map[string]any{"sound_id": soundID, "role": "greeting"}); w.Code != http.StatusNoContent {
+		t.Fatalf("attach sound: %d %s", w.Code, w.Body.String())
+	}
+	if w := s.do(t, "POST", "/tenant/campaigns/"+strconv.FormatInt(campID, 10)+"/resources/scripts", tok, map[string]any{"script_id": scriptID}); w.Code != http.StatusNoContent {
+		t.Fatalf("attach script: %d %s", w.Code, w.Body.String())
+	}
+	if w := s.do(t, "POST", "/tenant/campaigns/"+strconv.FormatInt(campID, 10)+"/resources/lists", tok, map[string]any{"list_id": listID}); w.Code != http.StatusNoContent {
+		t.Fatalf("attach list: %d %s", w.Code, w.Body.String())
+	}
+
+	w = s.do(t, "GET", "/tenant/campaigns/"+strconv.FormatInt(campID, 10)+"/resources", tok, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get resources: %d %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Sounds  []map[string]any `json:"sounds"`
+		Scripts []map[string]any `json:"scripts"`
+		Lists   []map[string]any `json:"lists"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp.Sounds) != 1 || resp.Sounds[0]["role"] != "greeting" {
+		t.Fatalf("sounds: %v", resp.Sounds)
+	}
+	if len(resp.Scripts) != 1 || resp.Scripts[0]["type"] != "press1" {
+		t.Fatalf("scripts: %v", resp.Scripts)
+	}
+	if len(resp.Lists) != 1 || resp.Lists[0]["list_name"] != "list-a" {
+		t.Fatalf("lists: %v", resp.Lists)
+	}
+
+	if w := s.do(t, "DELETE", "/tenant/campaigns/"+strconv.FormatInt(campID, 10)+"/resources/sounds/"+strconv.FormatInt(soundID, 10)+"?role=greeting", tok, nil); w.Code != http.StatusNoContent {
+		t.Fatalf("detach sound: %d", w.Code)
+	}
+
+	w = s.do(t, "GET", "/tenant/campaigns/"+strconv.FormatInt(campID, 10)+"/resources", tok, nil)
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp.Sounds) != 0 {
+		t.Fatalf("sound should be detached: %v", resp.Sounds)
+	}
+}
+
+func TestAttachListUpdatesLeadCampaignID(t *testing.T) {
+	s := newStack(t)
+	ctx := context.Background()
+	tn, _ := s.repo.CreateTenantAsSuperAdmin(ctx, tenant.Tenant{Slug: "att", Name: "x", SIPDomain: "att.sip"})
+	tok := s.tokenFor(t, 1, tn.ID, "tenant_owner")
+
+	w := s.do(t, "POST", "/tenant/lists/", tok, map[string]any{"name": "spring"})
+	var L map[string]any
+	json.Unmarshal(w.Body.Bytes(), &L)
+	listID := int64(L["id"].(float64))
+
+	// Seed leads with list_id but no campaign_id.
+	var leadIDs []int64
+	if err := db.WithCtx(ctx, s.repo.Pool(), db.Ctx{Role: "tenant_owner", TenantID: tn.ID}, func(tx pgx.Tx) error {
+		for i := 0; i < 3; i++ {
+			var id int64
+			if err := tx.QueryRow(ctx, `
+				INSERT INTO leads (tenant_id, list_id, phone_e164, custom_fields)
+				VALUES ($1, $2, $3, '{}') RETURNING id
+			`, tn.ID, listID, "+155500000"+strconv.Itoa(i)).Scan(&id); err != nil {
+				return err
+			}
+			leadIDs = append(leadIDs, id)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("seed leads: %v", err)
+	}
+
+	w = s.do(t, "POST", "/tenant/campaigns/", tok, map[string]any{"name": "c1", "mode": "broadcast"})
+	var c map[string]any
+	json.Unmarshal(w.Body.Bytes(), &c)
+	campID := int64(c["id"].(float64))
+
+	if w := s.do(t, "POST", "/tenant/campaigns/"+strconv.FormatInt(campID, 10)+"/resources/lists", tok, map[string]any{"list_id": listID}); w.Code != http.StatusNoContent {
+		t.Fatalf("attach: %d %s", w.Code, w.Body.String())
+	}
+
+	// All 3 leads should now have campaign_id = campID.
+	var got int
+	if err := db.WithCtx(ctx, s.repo.Pool(), db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT COUNT(*) FROM leads WHERE list_id = $1 AND campaign_id = $2`, listID, campID).Scan(&got)
+	}); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if got != 3 {
+		t.Fatalf("expected 3 leads to be re-attached, got %d", got)
+	}
+}
