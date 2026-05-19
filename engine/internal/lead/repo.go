@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -108,20 +110,28 @@ func (r *Repo) ListLeadsTx(ctx context.Context, tx pgx.Tx, f ListFilter) ([]Lead
 }
 
 type LeadUpdate struct {
-	CampaignID  *int64
-	SetCampaign bool
+	CampaignID         *int64
+	SetCampaign        bool
+	DialDestination    *string
+	SetDialDestination bool
 }
 
 func (r *Repo) UpdateLeadTx(ctx context.Context, tx pgx.Tx, id int64, u LeadUpdate) (Lead, error) {
-	var out Lead
-	if !u.SetCampaign {
+	if !u.SetCampaign && !u.SetDialDestination {
 		return r.GetLeadTx(ctx, tx, id)
 	}
-	row := tx.QueryRow(ctx, `
-		UPDATE leads
-		   SET campaign_id = $2, updated_at = now()
-		 WHERE id = $1
-	 RETURNING `+leadFields, id, u.CampaignID)
+	sets := []string{"updated_at = now()"}
+	args := []any{id}
+	if u.SetCampaign {
+		args = append(args, u.CampaignID)
+		sets = append(sets, fmt.Sprintf("campaign_id = $%d", len(args)))
+	}
+	if u.SetDialDestination {
+		args = append(args, u.DialDestination)
+		sets = append(sets, fmt.Sprintf("dial_destination = $%d", len(args)))
+	}
+	var out Lead
+	row := tx.QueryRow(ctx, "UPDATE leads SET "+strings.Join(sets, ", ")+" WHERE id = $1 RETURNING "+leadFields, args...)
 	err := scanLead(row, &out)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, ErrNotFound

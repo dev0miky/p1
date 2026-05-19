@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
+	"p1/engine/internal/db"
 	"p1/engine/internal/tenant"
 )
 
@@ -256,6 +259,84 @@ func TestLeadPagination(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.Total != 5 || len(resp.Leads) != 2 || resp.Limit != 2 {
 		t.Fatalf("pagination: total=%d returned=%d limit=%d", resp.Total, len(resp.Leads), resp.Limit)
+	}
+}
+
+func TestLeadActivityReturnsEventsScopedToLead(t *testing.T) {
+	s := newStack(t)
+	ctx := context.Background()
+	tn, _ := s.repo.CreateTenantAsSuperAdmin(ctx, tenant.Tenant{Slug: "lav", Name: "x", SIPDomain: "lav.sip"})
+	tok := s.tokenFor(t, 1, tn.ID, "tenant_owner")
+
+	w := s.do(t, "POST", "/tenant/leads/", tok, map[string]any{"phone_e164": "+15556667777"})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	var L map[string]any
+	json.Unmarshal(w.Body.Bytes(), &L)
+	leadID := int64(L["id"].(float64))
+
+	if err := db.WithCtx(ctx, s.repo.Pool(), db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO call_state (uuid, tenant_id, lead_id, state, dialed_number, started_at, version)
+			VALUES ('11111111-1111-1111-1111-111111111111', $1, $2, 'completed', '+15556667777', now() - interval '5 minutes', 4)
+		`, tn.ID, leadID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `
+			INSERT INTO call_events (call_uuid, tenant_id, from_state, to_state, reason, at)
+			VALUES
+			  ('11111111-1111-1111-1111-111111111111', $1, NULL, 'queued', 'created', now() - interval '5 minutes'),
+			  ('11111111-1111-1111-1111-111111111111', $1, 'queued', 'originating', 'bgapi_accepted', now() - interval '5 minutes' + interval '1 second'),
+			  ('11111111-1111-1111-1111-111111111111', $1, 'originating', 'completed', 'hangup:normal_clearing', now() - interval '4 minutes')
+		`, tn.ID)
+		return err
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	w = s.do(t, "GET", "/tenant/leads/"+strconv.FormatInt(leadID, 10)+"/activity", tok, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("activity: %d %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Calls []struct {
+			UUID   string `json:"uuid"`
+			State  string `json:"state"`
+			Events []struct {
+				FromState *string `json:"from_state"`
+				ToState   string  `json:"to_state"`
+				Reason    *string `json:"reason"`
+			} `json:"events"`
+		} `json:"calls"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp.Calls) != 1 {
+		t.Fatalf("calls: want 1, got %d body=%s", len(resp.Calls), w.Body.String())
+	}
+	if resp.Calls[0].UUID != "11111111-1111-1111-1111-111111111111" {
+		t.Fatalf("uuid mismatch: %s", resp.Calls[0].UUID)
+	}
+	if len(resp.Calls[0].Events) != 3 {
+		t.Fatalf("events: want 3, got %d", len(resp.Calls[0].Events))
+	}
+}
+
+func TestLeadActivityCrossTenantReturns404(t *testing.T) {
+	s := newStack(t)
+	ctx := context.Background()
+	tA, _ := s.repo.CreateTenantAsSuperAdmin(ctx, tenant.Tenant{Slug: "lavxa", Name: "A", SIPDomain: "lavxa.sip"})
+	tB, _ := s.repo.CreateTenantAsSuperAdmin(ctx, tenant.Tenant{Slug: "lavxb", Name: "B", SIPDomain: "lavxb.sip"})
+	tokB := s.tokenFor(t, 2, tB.ID, "tenant_owner")
+	w := s.do(t, "POST", "/tenant/leads/", tokB, map[string]any{"phone_e164": "+15554443333"})
+	var L map[string]any
+	json.Unmarshal(w.Body.Bytes(), &L)
+	leadID := int64(L["id"].(float64))
+
+	tokA := s.tokenFor(t, 1, tA.ID, "tenant_owner")
+	w = s.do(t, "GET", "/tenant/leads/"+strconv.FormatInt(leadID, 10)+"/activity", tokA, nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("cross-tenant activity: want 404, got %d", w.Code)
 	}
 }
 

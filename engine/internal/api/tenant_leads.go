@@ -227,9 +227,113 @@ func (a *tenantLeads) get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, leadToResponse(l))
 }
 
+type activityEvent struct {
+	FromState *string `json:"from_state"`
+	ToState   string  `json:"to_state"`
+	Reason    *string `json:"reason"`
+	At        string  `json:"at"`
+}
+
+type activityCall struct {
+	UUID        string          `json:"uuid"`
+	State       string          `json:"state"`
+	StartedAt   string          `json:"started_at"`
+	AnsweredAt  *string         `json:"answered_at,omitempty"`
+	EndedAt     *string         `json:"ended_at,omitempty"`
+	HangupCause *string         `json:"hangup_cause,omitempty"`
+	Events      []activityEvent `json:"events"`
+}
+
+func (a *tenantLeads) activity(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	claims, _ := auth.ClaimsFromContext(r.Context())
+	var calls []activityCall
+	err = db.WithCtx(r.Context(), a.repo.Pool(), db.Ctx{Role: claims.Role, TenantID: claims.TenantID, UserID: claims.UserID}, func(tx pgx.Tx) error {
+		if _, err := a.lRepo.GetLeadTx(r.Context(), tx, id); err != nil {
+			return err
+		}
+		rows, err := tx.Query(r.Context(), `
+			SELECT uuid::text, state, started_at, answered_at, ended_at, hangup_cause
+			  FROM call_state
+			 WHERE lead_id = $1
+			 ORDER BY started_at DESC
+			 LIMIT 50
+		`, id)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var c activityCall
+			var startedAt time.Time
+			var answeredAt, endedAt *time.Time
+			if err := rows.Scan(&c.UUID, &c.State, &startedAt, &answeredAt, &endedAt, &c.HangupCause); err != nil {
+				return err
+			}
+			c.StartedAt = startedAt.Format(time.RFC3339Nano)
+			if answeredAt != nil {
+				s := answeredAt.Format(time.RFC3339Nano)
+				c.AnsweredAt = &s
+			}
+			if endedAt != nil {
+				s := endedAt.Format(time.RFC3339Nano)
+				c.EndedAt = &s
+			}
+			calls = append(calls, c)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for i, c := range calls {
+			eRows, err := tx.Query(r.Context(), `
+				SELECT from_state, to_state, reason, at
+				  FROM call_events
+				 WHERE call_uuid = $1::uuid
+				 ORDER BY at DESC, id DESC
+			`, c.UUID)
+			if err != nil {
+				return err
+			}
+			var events []activityEvent
+			for eRows.Next() {
+				var e activityEvent
+				var at time.Time
+				if err := eRows.Scan(&e.FromState, &e.ToState, &e.Reason, &at); err != nil {
+					eRows.Close()
+					return err
+				}
+				e.At = at.Format(time.RFC3339Nano)
+				events = append(events, e)
+			}
+			eRows.Close()
+			calls[i].Events = events
+		}
+		return nil
+	})
+	if errors.Is(err, lead.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "lead not found")
+		return
+	}
+	if err != nil {
+		slog.Error("lead activity failed", "err", err, "lead_id", id, "tenant_id", claims.TenantID, "req_id", middleware.GetReqID(r.Context()))
+		writeError(w, http.StatusInternalServerError, "activity failed")
+		return
+	}
+	if calls == nil {
+		calls = []activityCall{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"calls": calls})
+}
+
 type updateLeadRequest struct {
-	CampaignID    *int64 `json:"campaign_id"`
-	HasCampaignID bool   `json:"-"`
+	CampaignID         *int64  `json:"campaign_id"`
+	HasCampaignID      bool    `json:"-"`
+	DialDestination    *string `json:"dial_destination"`
+	HasDialDestination bool    `json:"-"`
 }
 
 func (req *updateLeadRequest) UnmarshalJSON(data []byte) error {
@@ -245,6 +349,18 @@ func (req *updateLeadRequest) UnmarshalJSON(data []byte) error {
 				return err
 			}
 			req.CampaignID = &n
+		}
+	}
+	if v, ok := raw["dial_destination"]; ok {
+		req.HasDialDestination = true
+		if string(v) != "null" {
+			var s string
+			if err := json.Unmarshal(v, &s); err != nil {
+				return err
+			}
+			if s != "" {
+				req.DialDestination = &s
+			}
 		}
 	}
 	return nil
@@ -274,8 +390,10 @@ func (a *tenantLeads) update(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		out, err = a.lRepo.UpdateLeadTx(r.Context(), tx, id, lead.LeadUpdate{
-			CampaignID:  req.CampaignID,
-			SetCampaign: req.HasCampaignID,
+			CampaignID:         req.CampaignID,
+			SetCampaign:        req.HasCampaignID,
+			DialDestination:    req.DialDestination,
+			SetDialDestination: req.HasDialDestination,
 		})
 		if err != nil {
 			return err
@@ -288,8 +406,8 @@ func (a *tenantLeads) update(w http.ResponseWriter, r *http.Request) {
 			EntityType: "lead",
 			EntityID:   strconv.FormatInt(id, 10),
 			Action:     "update",
-			Before:     map[string]any{"campaign_id": before.CampaignID},
-			After:      map[string]any{"campaign_id": out.CampaignID},
+			Before:     map[string]any{"campaign_id": before.CampaignID, "dial_destination": before.DialDestination},
+			After:      map[string]any{"campaign_id": out.CampaignID, "dial_destination": out.DialDestination},
 			IP:         clientIP(r),
 			UserAgent:  r.UserAgent(),
 		})
