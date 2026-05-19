@@ -14,7 +14,7 @@ import {
 } from "@/components/ui";
 import { Table, type Column } from "@/components/table";
 import { TagInput, TagChips } from "@/components/tags";
-import { ApiError, apiUpload } from "@/lib/api";
+import { api, ApiError, apiUpload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { toast } from "@/lib/toast";
 
@@ -148,6 +148,38 @@ export function ListsPage() {
   );
 }
 
+function parseManualNumbers(text: string): { valid: string[]; invalid: string[] } {
+  const valid: string[] = [];
+  const invalid: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of text.split(/[\n,;]+/)) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const e164 = toE164(trimmed);
+    if (!e164) {
+      invalid.push(trimmed);
+      continue;
+    }
+    if (seen.has(e164)) continue;
+    seen.add(e164);
+    valid.push(e164);
+  }
+  return { valid, invalid };
+}
+
+function toE164(s: string): string | null {
+  const hadPlus = s.trim().startsWith("+");
+  const digits = s.replace(/[^\d]/g, "");
+  if (digits.length === 0) return null;
+  if (hadPlus) {
+    if (digits.length < 8 || digits.length > 15) return null;
+    return `+${digits}`;
+  }
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return null;
+}
+
 function DeleteBtn({ row, onChanged }: { row: ListRow; onChanged: () => void }) {
   const del = useApiMutation<void, void>(`/tenant/lists/${row.id}`, "DELETE", {
     invalidate: ["lists"],
@@ -183,6 +215,7 @@ function CreateModal({
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [hover, setHover] = useState(false);
+  const [manualText, setManualText] = useState("");
   const [name, setName] = useState("");
   const [nameTouched, setNameTouched] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
@@ -198,6 +231,7 @@ function CreateModal({
   useEffect(() => {
     if (!open) {
       setFile(null);
+      setManualText("");
       setName("");
       setNameTouched(false);
       setTags([]);
@@ -226,9 +260,16 @@ function CreateModal({
     if (f) pickFile(f);
   }
 
+  const parsedManual = parseManualNumbers(manualText);
+  const manualCount = parsedManual.valid.length;
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setErr(null);
+    if (parsedManual.invalid.length > 0) {
+      setErr(`can't parse: ${parsedManual.invalid.slice(0, 3).join(", ")}${parsedManual.invalid.length > 3 ? "…" : ""}`);
+      return;
+    }
     setBusy(true);
     try {
       const created = await create.mutateAsync({
@@ -241,6 +282,30 @@ function CreateModal({
         fd.set("file", file);
         await apiUpload<ImportJob>(`/tenant/lists/${created.id}/import`, fd, { token });
         toast.success("list created · import queued", { description: file.name });
+      } else if (manualCount > 0) {
+        let added = 0;
+        let failed = 0;
+        for (const phone of parsedManual.valid) {
+          try {
+            await api(`/tenant/leads/`, {
+              method: "POST",
+              token,
+              body: { list_id: created.id, phone_e164: phone },
+            });
+            added++;
+          } catch {
+            failed++;
+          }
+        }
+        if (failed > 0) {
+          toast.success(`list created · added ${added} of ${added + failed}`, {
+            description: `${failed} duplicate or invalid`,
+          });
+        } else {
+          toast.success(`list created · added ${added} lead${added === 1 ? "" : "s"}`, {
+            description: created.name,
+          });
+        }
       } else {
         toast.success("list created", { description: created.name });
       }
@@ -254,24 +319,40 @@ function CreateModal({
   }
 
   const canSubmit = name.trim().length > 0 && !busy;
+  const fileMode = file !== null;
+  const manualMode = !fileMode && manualText.trim().length > 0;
+  const submitLabel = busy
+    ? fileMode
+      ? "uploading..."
+      : "creating..."
+    : fileMode
+      ? "create + import"
+      : manualCount > 0
+        ? `create + add ${manualCount} lead${manualCount === 1 ? "" : "s"}`
+        : "create empty";
 
   return (
     <Modal open={open} onClose={onClose} title="New lead list">
       <form onSubmit={submit} className="space-y-6">
         <div
           onDragOver={(e) => {
+            if (manualMode) return;
             e.preventDefault();
             setHover(true);
           }}
           onDragLeave={() => setHover(false)}
-          onDrop={onDrop}
+          onDrop={(e) => {
+            if (manualMode) return;
+            onDrop(e);
+          }}
           className={clsx(
-            "border border-dashed transition-colors duration-150 px-6 py-8 text-center",
+            "border border-dashed transition-colors duration-150 px-6 py-7 text-center",
+            manualMode && "opacity-40 pointer-events-none",
             hover ? "border-phosphor bg-phosphor/[0.04]" : "border-ink-400 bg-ink-50",
           )}
         >
           <p className="font-mono text-2xs uppercase tracking-widest text-ink-700">
-            drop csv to start a list — or skip to create an empty one
+            drop csv here
           </p>
           {file && (
             <p className="mt-3 text-sm text-ink-950">
@@ -282,8 +363,8 @@ function CreateModal({
             </p>
           )}
           <input ref={inputRef} type="file" accept=".csv,text/csv" onChange={onChange} className="hidden" />
-          <div className="mt-4 flex items-center justify-center gap-3">
-            <Button type="button" variant="ghost" onClick={() => inputRef.current?.click()}>
+          <div className="mt-3 flex items-center justify-center gap-3">
+            <Button type="button" variant="ghost" onClick={() => inputRef.current?.click()} disabled={manualMode}>
               {file ? "replace" : "browse"}
             </Button>
             {file && (
@@ -299,6 +380,35 @@ function CreateModal({
               </button>
             )}
           </div>
+        </div>
+
+        <div className="relative text-center">
+          <div className="absolute inset-x-0 top-1/2 h-px bg-ink-400" aria-hidden />
+          <span className="relative bg-ink-100 px-3 font-mono text-2xs uppercase tracking-widest text-ink-700">
+            or
+          </span>
+        </div>
+
+        <div className={clsx(fileMode && "opacity-40 pointer-events-none")}>
+          <Label
+            hint={
+              parsedManual.invalid.length > 0
+                ? `${parsedManual.invalid.length} can't parse`
+                : manualCount > 0
+                  ? `${manualCount} valid number${manualCount === 1 ? "" : "s"}`
+                  : "one per line · accepts 5551234567, (555) 123-4567, +15551234567"
+            }
+          >
+            Type numbers manually
+          </Label>
+          <textarea
+            value={manualText}
+            onChange={(e) => setManualText(e.target.value)}
+            disabled={fileMode}
+            rows={4}
+            placeholder="+15551234567&#10;5551239876"
+            className="mt-2 w-full bg-ink-50 border border-ink-400 px-3 py-2 font-mono text-sm text-ink-950 placeholder:text-ink-600 focus:outline-none focus:border-phosphor"
+          />
         </div>
 
         <div>
@@ -325,7 +435,7 @@ function CreateModal({
             cancel
           </Button>
           <Button type="submit" disabled={!canSubmit}>
-            {busy ? (file ? "uploading..." : "creating...") : file ? "create + import" : "create empty"}
+            {submitLabel}
           </Button>
         </div>
       </form>
