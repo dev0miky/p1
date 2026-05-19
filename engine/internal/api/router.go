@@ -181,6 +181,13 @@ func NewRouter(cfg Config) http.Handler {
 		r.Post("/{id}/abort", tenIm.abort)
 	})
 
+	tenRT := &tenantRealtime{repo: cfg.Repo}
+	r.Route("/tenant/events", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireTenant)
+		r.Get("/", tenRT.events)
+	})
+
 	tenScripts := &tenantScripts{repo: cfg.Repo, sRepo: script.NewRepo()}
 	r.Route("/tenant/scripts", func(r chi.Router) {
 		r.Use(auth.RequireAuth(cfg.Issuer))

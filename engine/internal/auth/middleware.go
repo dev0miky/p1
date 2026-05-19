@@ -76,12 +76,16 @@ func RequireTenant(next http.Handler) http.Handler {
 func bearerToken(r *http.Request) (string, bool) {
 	h := r.Header.Get("Authorization")
 	const prefix = "Bearer "
-	if !strings.HasPrefix(h, prefix) {
-		return "", false
+	if strings.HasPrefix(h, prefix) {
+		tok := strings.TrimSpace(h[len(prefix):])
+		if tok != "" {
+			return tok, true
+		}
 	}
-	tok := strings.TrimSpace(h[len(prefix):])
-	if tok == "" {
-		return "", false
+	// Fallback: ?token=... for browser EventSource (which cannot set headers).
+	// Same JWT, same TTL, same Issuer.Verify path.
+	if tok := strings.TrimSpace(r.URL.Query().Get("token")); tok != "" {
+		return tok, true
 	}
-	return tok, true
+	return "", false
 }

@@ -1,7 +1,9 @@
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { Link } from "@tanstack/react-router";
+import clsx from "clsx";
 import { useApiQuery } from "@/lib/hooks";
 import { useAuth } from "@/lib/auth";
+import { useLiveActivity, type LiveEvent } from "@/lib/live";
 
 function useCount(key: string, path: string, field: string) {
   const q = useApiQuery<Record<string, unknown>>([key], path);
@@ -60,6 +62,7 @@ export function Dashboard() {
 
       <DialerActivity />
 
+      <LiveActivityPanel />
 
       <section className="mt-16 grid grid-cols-1 lg:grid-cols-3 gap-px bg-ink-400 border border-ink-400">
         <Panel title="Compliance" status="ok">
@@ -251,4 +254,129 @@ function Row({ label, value, accent }: { label: string; value: string; accent?: 
       <span className={`font-mono text-sm tnum ${cls}`}>{value}</span>
     </div>
   );
+}
+
+function LiveActivityPanel() {
+  const { events, connected } = useLiveActivity(40);
+  const realEvents = events.filter((e) => e.type !== "hello");
+
+  return (
+    <section className="mt-16">
+      <div className="flex items-baseline justify-between border-b border-ink-400 pb-3 mb-0">
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-2xs uppercase tracking-widest text-ink-700">§ live activity</span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className={clsx(
+                "status-dot",
+                connected ? "bg-phosphor animate-pulse-dot" : "bg-ink-600",
+              )}
+              aria-hidden
+            />
+            <span
+              className={clsx(
+                "font-mono text-2xs uppercase tracking-widest",
+                connected ? "text-phosphor" : "text-ink-700",
+              )}
+            >
+              {connected ? "stream" : "offline"}
+            </span>
+          </span>
+        </div>
+        <span className="font-mono text-2xs uppercase tracking-widest text-ink-700">
+          <span className="text-ink-950 tnum">{realEvents.length}</span> events
+        </span>
+      </div>
+
+      <div className="surface bg-ink-100 max-h-[20rem] overflow-y-auto">
+        {realEvents.length === 0 ? (
+          <p className="px-5 py-6 font-mono text-2xs uppercase tracking-widest text-ink-700">
+            {connected
+              ? "waiting for events — trigger a call or import to see them here"
+              : "stream not connected — sign in or refresh"}
+          </p>
+        ) : (
+          <AnimatePresence initial={false}>
+            {realEvents.map((e, idx) => (
+              <motion.div
+                key={`${e.at.getTime()}-${idx}`}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="grid grid-cols-[7rem_8rem_1fr] gap-4 px-5 py-2.5 items-baseline border-b border-ink-400/60 last:border-b-0 hover:bg-ink-150"
+              >
+                <span className="font-mono text-2xs text-ink-700 tnum">{fmtClock(e.at)}</span>
+                <EventBadge type={e.type} />
+                <EventSummary event={e} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function fmtClock(d: Date): string {
+  return d.toTimeString().slice(0, 8);
+}
+
+function EventBadge({ type }: { type: LiveEvent["type"] }) {
+  let label: string = type;
+  let tone = "text-ink-700";
+  if (type === "call.event") {
+    label = "call";
+    tone = "text-phosphor";
+  } else if (type === "import.progress") {
+    label = "import";
+    tone = "text-info";
+  } else if (type === "campaign.status") {
+    label = "campaign";
+    tone = "text-amber";
+  }
+  return (
+    <span className={clsx("font-mono text-2xs uppercase tracking-widest", tone)}>{label}</span>
+  );
+}
+
+function EventSummary({ event }: { event: LiveEvent }) {
+  const raw = event.raw as Record<string, unknown> | null;
+  if (!raw || typeof raw !== "object") return <span className="text-ink-700">—</span>;
+  if (event.type === "call.event") {
+    const from = raw.from_state ? String(raw.from_state) : "—";
+    const to = String(raw.to_state ?? "");
+    const reason = raw.reason ? String(raw.reason) : "";
+    return (
+      <span className="font-mono text-2xs">
+        <span className="text-ink-700">{from}</span>
+        <span className="text-ink-600 mx-1.5">→</span>
+        <span className="text-ink-950 uppercase tracking-widest">{to}</span>
+        {reason && <span className="text-ink-700 lowercase ml-2">{reason}</span>}
+      </span>
+    );
+  }
+  if (event.type === "import.progress") {
+    return (
+      <span className="font-mono text-2xs">
+        <span className="text-ink-950">{String(raw.csv_filename ?? "")}</span>
+        <span className="text-ink-700 ml-2 tnum">
+          {Number(raw.processed_rows ?? 0)} / {Number(raw.total_rows ?? 0)}
+        </span>
+        {" · "}
+        <span className="uppercase tracking-widest text-ink-700">{String(raw.status ?? "")}</span>
+      </span>
+    );
+  }
+  if (event.type === "campaign.status") {
+    return (
+      <span className="font-mono text-2xs">
+        <span className="text-ink-950">{String(raw.name ?? "")}</span>
+        <span className="text-ink-700 ml-2 tnum">#{String(raw.run_no ?? 0)}</span>
+        {" · "}
+        <span className="uppercase tracking-widest text-ink-700">{String(raw.status ?? "")}</span>
+      </span>
+    );
+  }
+  return <span className="font-mono text-2xs text-ink-700">{JSON.stringify(raw)}</span>;
 }
