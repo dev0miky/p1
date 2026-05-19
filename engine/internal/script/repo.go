@@ -11,19 +11,22 @@ type Repo struct{}
 
 func NewRepo() *Repo { return &Repo{} }
 
-const fields = `id, tenant_id, name, description, type, body, created_at, updated_at`
+const fields = `id, tenant_id, name, description, type, body, tags, created_at, updated_at`
 
 func scan(row pgx.Row, s *Script) error {
-	return row.Scan(&s.ID, &s.TenantID, &s.Name, &s.Description, &s.Type, &s.Body, &s.CreatedAt, &s.UpdatedAt)
+	return row.Scan(&s.ID, &s.TenantID, &s.Name, &s.Description, &s.Type, &s.Body, &s.Tags, &s.CreatedAt, &s.UpdatedAt)
 }
 
 func (r *Repo) CreateTx(ctx context.Context, tx pgx.Tx, s Script) (Script, error) {
+	if s.Tags == nil {
+		s.Tags = []string{}
+	}
 	var out Script
 	row := tx.QueryRow(ctx, `
-		INSERT INTO scripts (tenant_id, name, description, type, body)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO scripts (tenant_id, name, description, type, body, tags)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING `+fields,
-		s.TenantID, s.Name, s.Description, s.Type, s.Body,
+		s.TenantID, s.Name, s.Description, s.Type, s.Body, s.Tags,
 	)
 	return out, scan(row, &out)
 }
@@ -60,9 +63,19 @@ type UpdatePatch struct {
 	Description *string
 	Type        string
 	Body        *string
+	Tags        []string
+	SetTags     bool
 }
 
 func (r *Repo) UpdateTx(ctx context.Context, tx pgx.Tx, id int64, patch UpdatePatch) (Script, error) {
+	var tagsPtr *[]string
+	if patch.SetTags {
+		tags := patch.Tags
+		if tags == nil {
+			tags = []string{}
+		}
+		tagsPtr = &tags
+	}
 	var out Script
 	row := tx.QueryRow(ctx, `
 		UPDATE scripts SET
@@ -70,10 +83,11 @@ func (r *Repo) UpdateTx(ctx context.Context, tx pgx.Tx, id int64, patch UpdatePa
 		  description = COALESCE($2, description),
 		  type        = COALESCE(NULLIF($3, ''), type),
 		  body        = COALESCE($4, body),
+		  tags        = COALESCE($5, tags),
 		  updated_at  = now()
-		WHERE id = $5
+		WHERE id = $6
 		RETURNING `+fields,
-		patch.Name, patch.Description, patch.Type, patch.Body, id,
+		patch.Name, patch.Description, patch.Type, patch.Body, tagsPtr, id,
 	)
 	err := scan(row, &out)
 	if errors.Is(err, pgx.ErrNoRows) {

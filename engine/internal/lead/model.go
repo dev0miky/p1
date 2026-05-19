@@ -55,6 +55,7 @@ type List struct {
 	TenantID  int64
 	Name      string
 	Source    *string
+	Tags      []string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

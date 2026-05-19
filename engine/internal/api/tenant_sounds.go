@@ -31,20 +31,25 @@ type tenantSounds struct {
 }
 
 type soundResponse struct {
-	ID          int64   `json:"id"`
-	TenantID    int64   `json:"tenant_id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description,omitempty"`
-	MimeType    string  `json:"mime_type"`
-	SizeBytes   int64   `json:"size_bytes"`
-	DurationMS  *int    `json:"duration_ms,omitempty"`
-	SHA256      *string `json:"sha256,omitempty"`
-	Status      string  `json:"status"`
-	CreatedAt   string  `json:"created_at"`
-	UpdatedAt   string  `json:"updated_at"`
+	ID          int64    `json:"id"`
+	TenantID    int64    `json:"tenant_id"`
+	Name        string   `json:"name"`
+	Description *string  `json:"description,omitempty"`
+	MimeType    string   `json:"mime_type"`
+	SizeBytes   int64    `json:"size_bytes"`
+	DurationMS  *int     `json:"duration_ms,omitempty"`
+	SHA256      *string  `json:"sha256,omitempty"`
+	Status      string   `json:"status"`
+	Tags        []string `json:"tags"`
+	CreatedAt   string   `json:"created_at"`
+	UpdatedAt   string   `json:"updated_at"`
 }
 
 func soundToResponse(s sound.Sound) soundResponse {
+	tags := s.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 	return soundResponse{
 		ID:          s.ID,
 		TenantID:    s.TenantID,
@@ -55,6 +60,7 @@ func soundToResponse(s sound.Sound) soundResponse {
 		DurationMS:  s.DurationMS,
 		SHA256:      s.SHA256,
 		Status:      string(s.Status),
+		Tags:        tags,
 		CreatedAt:   s.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:   s.UpdatedAt.Format(time.RFC3339),
 	}
@@ -154,6 +160,16 @@ func (a *tenantSounds) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tagsRaw := strings.TrimSpace(r.FormValue("tags"))
+	var tags []string
+	if tagsRaw != "" {
+		for _, part := range strings.Split(tagsRaw, ",") {
+			if t := strings.TrimSpace(part); t != "" {
+				tags = append(tags, t)
+			}
+		}
+	}
+
 	s := sound.Sound{
 		TenantID:    tid,
 		Name:        name,
@@ -163,6 +179,7 @@ func (a *tenantSounds) create(w http.ResponseWriter, r *http.Request) {
 		SizeBytes:   res.Size,
 		SHA256:      &res.SHA256,
 		Status:      sound.StatusReady,
+		Tags:        tags,
 	}
 
 	var created sound.Sound
@@ -300,13 +317,21 @@ func (a *tenantSounds) update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
-	var req struct {
-		Name        string  `json:"name"`
-		Description *string `json:"description"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json")
 		return
+	}
+	patch := sound.UpdatePatch{}
+	if v, ok := raw["name"]; ok {
+		_ = json.Unmarshal(v, &patch.Name)
+	}
+	if v, ok := raw["description"]; ok {
+		_ = json.Unmarshal(v, &patch.Description)
+	}
+	if v, ok := raw["tags"]; ok {
+		patch.SetTags = true
+		_ = json.Unmarshal(v, &patch.Tags)
 	}
 	claims, _ := auth.ClaimsFromContext(r.Context())
 	tid := claims.TenantID
@@ -317,7 +342,7 @@ func (a *tenantSounds) update(w http.ResponseWriter, r *http.Request) {
 	var out sound.Sound
 	err = db.WithCtx(r.Context(), a.repo.Pool(), db.Ctx{Role: claims.Role, TenantID: tid, UserID: claims.UserID}, func(tx pgx.Tx) error {
 		var err error
-		out, err = a.sRepo.UpdateTx(r.Context(), tx, id, sound.UpdatePatch{Name: req.Name, Description: req.Description})
+		out, err = a.sRepo.UpdateTx(r.Context(), tx, id, patch)
 		return err
 	})
 	if errors.Is(err, sound.ErrNotFound) {

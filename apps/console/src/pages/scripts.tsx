@@ -10,6 +10,7 @@ import {
   PageHeader,
 } from "@/components/ui";
 import { Table, type Column } from "@/components/table";
+import { TagInput, TagChips } from "@/components/tags";
 import { ApiError } from "@/lib/api";
 import { toast } from "@/lib/toast";
 
@@ -19,6 +20,7 @@ interface Script {
   description?: string;
   type: "press1" | "broadcast" | "survey" | "custom";
   body: string;
+  tags: string[];
   created_at: string;
   updated_at: string;
 }
@@ -65,6 +67,12 @@ export function ScriptsPage() {
       width: "0.7fr",
       align: "right",
       render: (s) => <span className="data-cell text-ink-700">{s.body ? s.body.split("\n").length : 0}</span>,
+    },
+    {
+      key: "tags",
+      header: "Tags",
+      width: "1.2fr",
+      render: (s) => (s.tags?.length ? <TagChips tags={s.tags} max={3} /> : <span className="text-ink-700">—</span>),
     },
     {
       key: "updated",
@@ -132,9 +140,10 @@ function CreateModal({
   const [description, setDescription] = useState("");
   const [type, setType] = useState<(typeof TYPES)[number]>("press1");
   const [body, setBody] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
-  const create = useApiMutation<Script, { name: string; description?: string; type: string; body: string }>(
+  const create = useApiMutation<Script, { name: string; description?: string; type: string; body: string; tags?: string[] }>(
     "/tenant/scripts/",
     "POST",
     { invalidate: ["scripts"] },
@@ -149,12 +158,14 @@ function CreateModal({
         description: description || undefined,
         type,
         body,
+        tags: tags.length > 0 ? tags : undefined,
       });
       toast.success("script created", { description: created.name });
       setName("");
       setDescription("");
       setType("press1");
       setBody("");
+      setTags([]);
       onCreated();
       onClose();
     } catch (e) {
@@ -202,6 +213,10 @@ function CreateModal({
             className="mt-2 w-full bg-ink-50 border border-ink-400 px-3 py-2 font-mono text-sm text-ink-950 placeholder:text-ink-600 focus:outline-none focus:border-phosphor"
           />
         </div>
+        <div>
+          <Label hint="optional · lowercase, dash-separated">Tags</Label>
+          <TagInput value={tags} onChange={setTags} placeholder="spring, q2, voicemail-drop" />
+        </div>
         {err && <ErrorBanner>{err}</ErrorBanner>}
         <div className="flex items-center justify-end gap-3 border-t border-ink-400 pt-5">
           <Button type="button" variant="ghost" onClick={onClose}>
@@ -230,9 +245,10 @@ function EditModal({
   const [description, setDescription] = useState(script?.description ?? "");
   const [type, setType] = useState<Script["type"]>(script?.type ?? "press1");
   const [body, setBody] = useState(script?.body ?? "");
+  const [tags, setTags] = useState<string[]>(script?.tags ?? []);
   const [err, setErr] = useState<string | null>(null);
 
-  const patch = useApiMutation<Script, { name?: string; description?: string; type?: string; body?: string }>(
+  const patch = useApiMutation<Script, { name?: string; description?: string; type?: string; body?: string; tags?: string[] }>(
     `/tenant/scripts/${script?.id ?? 0}`,
     "PATCH",
     { invalidate: ["scripts"] },
@@ -253,6 +269,7 @@ function EditModal({
     setDescription(script.description ?? "");
     setType(script.type);
     setBody(script.body);
+    setTags(script.tags ?? []);
     setErr(null);
   }, [script]);
 
@@ -261,7 +278,7 @@ function EditModal({
     setErr(null);
     if (!script) return;
     try {
-      await patch.mutateAsync({ name, description, type, body });
+      await patch.mutateAsync({ name, description, type, body, tags });
       toast.success("script saved", { description: name });
       onSaved();
       onClose();
@@ -299,6 +316,10 @@ function EditModal({
               </button>
             ))}
           </div>
+        </div>
+        <div>
+          <Label>Tags</Label>
+          <TagInput value={tags} onChange={setTags} placeholder="add a tag" />
         </div>
         <div>
           <Label>Body</Label>

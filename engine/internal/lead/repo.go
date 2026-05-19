@@ -231,18 +231,21 @@ func (r *Repo) DeleteLeadTx(ctx context.Context, tx pgx.Tx, id int64) error {
 	return nil
 }
 
-const listFields = `id, tenant_id, name, source, created_at, updated_at`
+const listFields = `id, tenant_id, name, source, tags, created_at, updated_at`
 
 func scanList(row pgx.Row, l *List) error {
-	return row.Scan(&l.ID, &l.TenantID, &l.Name, &l.Source, &l.CreatedAt, &l.UpdatedAt)
+	return row.Scan(&l.ID, &l.TenantID, &l.Name, &l.Source, &l.Tags, &l.CreatedAt, &l.UpdatedAt)
 }
 
 func (r *Repo) CreateListTx(ctx context.Context, tx pgx.Tx, l List) (List, error) {
+	if l.Tags == nil {
+		l.Tags = []string{}
+	}
 	var out List
 	row := tx.QueryRow(ctx, `
-		INSERT INTO lead_lists (tenant_id, name, source)
-		VALUES ($1, $2, $3)
-		RETURNING `+listFields, l.TenantID, l.Name, l.Source)
+		INSERT INTO lead_lists (tenant_id, name, source, tags)
+		VALUES ($1, $2, $3, $4)
+		RETURNING `+listFields, l.TenantID, l.Name, l.Source, l.Tags)
 	return out, scanList(row, &out)
 }
 
@@ -261,19 +264,35 @@ func (r *Repo) GetListTx(ctx context.Context, tx pgx.Tx, id int64) (List, error)
 	return out, err
 }
 
-func (r *Repo) UpdateListTx(ctx context.Context, tx pgx.Tx, id int64, name, source string) (List, error) {
+type ListUpdate struct {
+	Name    string
+	Source  string
+	Tags    []string
+	SetTags bool
+}
+
+func (r *Repo) UpdateListTx(ctx context.Context, tx pgx.Tx, id int64, u ListUpdate) (List, error) {
 	var out List
 	var srcPtr *string
-	if source != "" {
-		srcPtr = &source
+	if u.Source != "" {
+		srcPtr = &u.Source
+	}
+	var tagsPtr *[]string
+	if u.SetTags {
+		tags := u.Tags
+		if tags == nil {
+			tags = []string{}
+		}
+		tagsPtr = &tags
 	}
 	row := tx.QueryRow(ctx, `
 		UPDATE lead_lists SET
 		  name       = COALESCE(NULLIF($1, ''), name),
 		  source     = COALESCE($2, source),
+		  tags       = COALESCE($3, tags),
 		  updated_at = now()
-		WHERE id = $3
-		RETURNING `+listFields, name, srcPtr, id)
+		WHERE id = $4
+		RETURNING `+listFields, u.Name, srcPtr, tagsPtr, id)
 	err := scanList(row, &out)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, ErrNotFound

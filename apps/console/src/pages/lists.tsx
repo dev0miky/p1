@@ -13,6 +13,7 @@ import {
   StatusDot,
 } from "@/components/ui";
 import { Table, type Column } from "@/components/table";
+import { TagInput, TagChips } from "@/components/tags";
 import { ApiError, apiUpload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { toast } from "@/lib/toast";
@@ -21,6 +22,7 @@ interface ListRow {
   id: number;
   name: string;
   source?: string;
+  tags: string[];
   lead_count: number;
   created_at: string;
   updated_at: string;
@@ -40,7 +42,7 @@ export function ListsPage() {
     {
       key: "name",
       header: "Name",
-      width: "2.2fr",
+      width: "1.8fr",
       sortable: true,
       sortValue: (l) => l.name,
       render: (l) => (
@@ -49,6 +51,12 @@ export function ListsPage() {
           {l.source && <p className="font-mono text-2xs text-ink-700 mt-0.5 truncate">{l.source}</p>}
         </div>
       ),
+    },
+    {
+      key: "tags",
+      header: "Tags",
+      width: "1.4fr",
+      render: (l) => (l.tags?.length ? <TagChips tags={l.tags} max={4} /> : <span className="text-ink-700">—</span>),
     },
     {
       key: "leads",
@@ -173,9 +181,10 @@ function CreateModal({
 }) {
   const [name, setName] = useState("");
   const [source, setSource] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
-  const create = useApiMutation<ListRow, { name: string; source?: string }>(
+  const create = useApiMutation<ListRow, { name: string; source?: string; tags?: string[] }>(
     "/tenant/lists/",
     "POST",
     { invalidate: ["lists"] },
@@ -185,10 +194,15 @@ function CreateModal({
     e.preventDefault();
     setErr(null);
     try {
-      const created = await create.mutateAsync({ name, source: source || undefined });
+      const created = await create.mutateAsync({
+        name,
+        source: source || undefined,
+        tags: tags.length > 0 ? tags : undefined,
+      });
       toast.success("list created", { description: created.name });
       setName("");
       setSource("");
+      setTags([]);
       onCreated();
       onClose();
     } catch (e) {
@@ -206,6 +220,10 @@ function CreateModal({
         <div>
           <Label hint="optional — where this list came from (CSV name, vendor, internal db)">Source</Label>
           <Input value={source} onChange={(e) => setSource(e.target.value)} placeholder="acme-2026q2.csv" />
+        </div>
+        <div>
+          <Label hint="lowercase, dash-separated. group + filter lists by tag later.">Tags</Label>
+          <TagInput value={tags} onChange={setTags} placeholder="press-enter-to-add" />
         </div>
         {err && <ErrorBanner>{err}</ErrorBanner>}
         <div className="flex items-center justify-end gap-3 border-t border-ink-400 pt-5">
