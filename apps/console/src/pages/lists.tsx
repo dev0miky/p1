@@ -179,9 +179,14 @@ function CreateModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const token = useAuth((s) => s.token);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [hover, setHover] = useState(false);
   const [name, setName] = useState("");
-  const [source, setSource] = useState("");
+  const [nameTouched, setNameTouched] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const create = useApiMutation<ListRow, { name: string; source?: string; tags?: string[] }>(
@@ -190,36 +195,125 @@ function CreateModal({
     { invalidate: ["lists"] },
   );
 
+  useEffect(() => {
+    if (!open) {
+      setFile(null);
+      setName("");
+      setNameTouched(false);
+      setTags([]);
+      setErr(null);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }, [open]);
+
+  function pickFile(f: File) {
+    setFile(f);
+    if (!nameTouched) {
+      setName(f.name.replace(/\.csv$/i, ""));
+    }
+    setErr(null);
+  }
+
+  function onDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setHover(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) pickFile(f);
+  }
+
+  function onChange(e: ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (f) pickFile(f);
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setErr(null);
+    setBusy(true);
     try {
       const created = await create.mutateAsync({
-        name,
-        source: source || undefined,
+        name: name.trim(),
+        source: file?.name,
         tags: tags.length > 0 ? tags : undefined,
       });
-      toast.success("list created", { description: created.name });
-      setName("");
-      setSource("");
-      setTags([]);
+      if (file) {
+        const fd = new FormData();
+        fd.set("file", file);
+        await apiUpload<ImportJob>(`/tenant/lists/${created.id}/import`, fd, { token });
+        toast.success("list created · import queued", { description: file.name });
+      } else {
+        toast.success("list created", { description: created.name });
+      }
       onCreated();
       onClose();
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "create failed");
+    } finally {
+      setBusy(false);
     }
   }
+
+  const canSubmit = name.trim().length > 0 && !busy;
 
   return (
     <Modal open={open} onClose={onClose} title="New lead list">
       <form onSubmit={submit} className="space-y-6">
-        <div>
-          <Label hint="must be unique within tenant">Name</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="spring-leads" />
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setHover(true);
+          }}
+          onDragLeave={() => setHover(false)}
+          onDrop={onDrop}
+          className={clsx(
+            "border border-dashed transition-colors duration-150 px-6 py-8 text-center",
+            hover ? "border-phosphor bg-phosphor/[0.04]" : "border-ink-400 bg-ink-50",
+          )}
+        >
+          <p className="font-mono text-2xs uppercase tracking-widest text-ink-700">
+            drop csv to start a list — or skip to create an empty one
+          </p>
+          {file && (
+            <p className="mt-3 text-sm text-ink-950">
+              {file.name}{" "}
+              <span className="ml-2 font-mono text-2xs text-ink-700">
+                {(file.size / 1024).toFixed(1)} kB
+              </span>
+            </p>
+          )}
+          <input ref={inputRef} type="file" accept=".csv,text/csv" onChange={onChange} className="hidden" />
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <Button type="button" variant="ghost" onClick={() => inputRef.current?.click()}>
+              {file ? "replace" : "browse"}
+            </Button>
+            {file && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFile(null);
+                  if (inputRef.current) inputRef.current.value = "";
+                }}
+                className="font-mono text-2xs uppercase tracking-widest text-ink-700 hover:text-danger"
+              >
+                clear
+              </button>
+            )}
+          </div>
         </div>
+
         <div>
-          <Label hint="optional — where this list came from (CSV name, vendor, internal db)">Source</Label>
-          <Input value={source} onChange={(e) => setSource(e.target.value)} placeholder="acme-2026q2.csv" />
+          <Label hint={file ? "auto-filled from filename — change if you like" : "must be unique within tenant"}>
+            Name
+          </Label>
+          <Input
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setNameTouched(true);
+            }}
+            required
+            placeholder="spring-leads"
+          />
         </div>
         <div>
           <Label hint="lowercase, dash-separated. group + filter lists by tag later.">Tags</Label>
@@ -230,8 +324,8 @@ function CreateModal({
           <Button type="button" variant="ghost" onClick={onClose}>
             cancel
           </Button>
-          <Button type="submit" disabled={create.isPending}>
-            {create.isPending ? "creating..." : "create"}
+          <Button type="submit" disabled={!canSubmit}>
+            {busy ? (file ? "uploading..." : "creating...") : file ? "create + import" : "create empty"}
           </Button>
         </div>
       </form>
