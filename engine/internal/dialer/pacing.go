@@ -12,10 +12,11 @@ type PacingInput struct {
 
 func DecideToDial(in PacingInput) int {
 	switch in.Mode {
-	case "broadcast":
+	case "broadcast", "press1":
+		// External-agent bridging: no internal agent queue to gate on, so
+		// both modes fill to MaxConcurrent. Operators cap volume via
+		// MaxConcurrent; the abandon-rate monitor guards over-dial.
 		return broadcastPace(in)
-	case "press1":
-		return press1Pace(in)
 	case "predictive":
 		return predictivePace(in)
 	case "preview":

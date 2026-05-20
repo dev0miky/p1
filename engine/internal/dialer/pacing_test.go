@@ -20,16 +20,18 @@ func TestBroadcastPacing(t *testing.T) {
 }
 
 func TestPress1Pacing(t *testing.T) {
+	// External-agent press-1 has no internal agent queue to gate on, so it
+	// fills to capacity like broadcast. The operator controls volume via
+	// MaxConcurrent. AvailableAgents is irrelevant here.
 	cases := []struct {
 		in   PacingInput
 		want int
 	}{
-		{PacingInput{Mode: "press1", DialRatio: 1.0, AvailableAgents: 5, InFlight: 0}, 5},
-		{PacingInput{Mode: "press1", DialRatio: 1.2, AvailableAgents: 5, InFlight: 0}, 6},
-		{PacingInput{Mode: "press1", DialRatio: 2.0, AvailableAgents: 10, InFlight: 15}, 5},
-		{PacingInput{Mode: "press1", DialRatio: 2.0, AvailableAgents: 10, InFlight: 20}, 0},
-		{PacingInput{Mode: "press1", DialRatio: 1.0, AvailableAgents: 0, InFlight: 0}, 0},
-		{PacingInput{Mode: "press1", DialRatio: 5.0, AvailableAgents: 10, MaxConcurrent: 20, InFlight: 0}, 20},
+		{PacingInput{Mode: "press1", MaxConcurrent: 100, InFlight: 0}, 100},
+		{PacingInput{Mode: "press1", MaxConcurrent: 100, InFlight: 60}, 40},
+		{PacingInput{Mode: "press1", MaxConcurrent: 100, InFlight: 150}, 0},
+		{PacingInput{Mode: "press1", MaxConcurrent: 0, InFlight: 0}, 50},
+		{PacingInput{Mode: "press1", AvailableAgents: 0, MaxConcurrent: 10, InFlight: 0}, 10},
 	}
 	for _, c := range cases {
 		if got := DecideToDial(c.in); got != c.want {
