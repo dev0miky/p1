@@ -19,6 +19,8 @@ end
 
 local wait_ms = tonumber(wait_ms_str) or 8000
 
+session:execute("avmd_start")
+
 local valid = bridge_d
 if opt_out_d ~= "" then
   valid = valid .. opt_out_d

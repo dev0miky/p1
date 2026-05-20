@@ -243,7 +243,7 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 	s.mu.Unlock()
 
 	callerNumber, callerName := s.pickCallerID(ctx, c.TenantID, c.ID, l.Attempts)
-	p1 := s.pickPress1(ctx, c.TenantID, c.ID)
+	flow := s.pickScriptFlow(ctx, c.TenantID, c.ID)
 
 	vars := esl.OriginateVars{
 		"origination_uuid":             callUUID,
@@ -265,20 +265,26 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 		dest = s.cfg.ForceDest
 	}
 	action := "&park"
-	if p1.transferTo != "" && p1.greetingPath != "" {
-		vars["greeting_sound"] = p1.greetingPath
-		vars["transfer_to"] = p1.transferTo
-		vars["bridge_digit"] = p1.bridgeDigit
-		vars["wait_timeout_ms"] = strconv.Itoa(p1.waitTimeoutMS)
-		if p1.optOutDigit != "" {
-			vars["opt_out_digit"] = p1.optOutDigit
+	switch flow.kind {
+	case "press1":
+		vars["greeting_sound"] = flow.greetingPath
+		vars["transfer_to"] = flow.transferTo
+		vars["bridge_digit"] = flow.bridgeDigit
+		vars["wait_timeout_ms"] = strconv.Itoa(flow.waitTimeoutMS)
+		if flow.optOutDigit != "" {
+			vars["opt_out_digit"] = flow.optOutDigit
 		}
-		if p1.preBridgePath != "" {
-			vars["pre_bridge_sound"] = p1.preBridgePath
+		if flow.preBridgePath != "" {
+			vars["pre_bridge_sound"] = flow.preBridgePath
 		}
 		action = "&lua(press1.lua)"
-	} else if s.cfg.TestPlayback != "" {
-		action = "&playback(" + s.cfg.TestPlayback + ")"
+	case "broadcast":
+		vars["greeting_sound"] = flow.greetingPath
+		action = "&lua(broadcast.lua)"
+	default:
+		if s.cfg.TestPlayback != "" {
+			action = "&playback(" + s.cfg.TestPlayback + ")"
+		}
 	}
 	octx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	jobUUID, err := s.cfg.ESL.Originate(octx, esl.OriginateParams{
@@ -454,7 +460,8 @@ func (s *Service) pickCallerID(ctx context.Context, tenantID, campaignID int64, 
 	return pick.E164Number, displayName
 }
 
-type press1Config struct {
+type scriptFlow struct {
+	kind          string
 	transferTo    string
 	greetingPath  string
 	preBridgePath string
@@ -463,7 +470,7 @@ type press1Config struct {
 	optOutDigit   string
 }
 
-func (s *Service) pickPress1(ctx context.Context, tenantID, campaignID int64) press1Config {
+func (s *Service) pickScriptFlow(ctx context.Context, tenantID, campaignID int64) scriptFlow {
 	var scripts []campaign.AttachedScript
 	err := db.WithCtx(ctx, s.cfg.Pool, db.Ctx{Role: "super_admin", TenantID: tenantID}, func(tx pgx.Tx) error {
 		var e error
@@ -471,42 +478,46 @@ func (s *Service) pickPress1(ctx context.Context, tenantID, campaignID int64) pr
 		return e
 	})
 	if err != nil {
-		s.logger.Warn("press1 script lookup failed", "campaign", campaignID, "err", err)
-		return press1Config{}
+		s.logger.Warn("script lookup failed", "campaign", campaignID, "err", err)
+		return scriptFlow{}
 	}
-	var sc *campaign.AttachedScript
 	for i := range scripts {
-		if scripts[i].Type != "press1" {
+		sc := &scripts[i]
+		if sc.GreetingFileKey == nil || sc.GreetingTenantID == nil {
 			continue
 		}
-		if resolveBridgeTarget(&scripts[i]) == "" {
-			continue
+		greeting := s.soundPath(*sc.GreetingTenantID, *sc.GreetingFileKey)
+		switch sc.Type {
+		case "broadcast":
+			return scriptFlow{kind: "broadcast", greetingPath: greeting}
+		case "press1":
+			target := resolveBridgeTarget(sc)
+			if target == "" {
+				continue
+			}
+			f := scriptFlow{
+				kind:          "press1",
+				transferTo:    target,
+				greetingPath:  greeting,
+				bridgeDigit:   sc.BridgeDigit,
+				waitTimeoutMS: sc.WaitTimeoutMS,
+			}
+			if f.bridgeDigit == "" {
+				f.bridgeDigit = "1"
+			}
+			if f.waitTimeoutMS <= 0 {
+				f.waitTimeoutMS = 8000
+			}
+			if sc.OptOutDigit != nil {
+				f.optOutDigit = *sc.OptOutDigit
+			}
+			if sc.PreBridgeFileKey != nil && sc.PreBridgeTenantID != nil {
+				f.preBridgePath = s.soundPath(*sc.PreBridgeTenantID, *sc.PreBridgeFileKey)
+			}
+			return f
 		}
-		sc = &scripts[i]
-		break
 	}
-	if sc == nil || sc.GreetingFileKey == nil || sc.GreetingTenantID == nil {
-		return press1Config{}
-	}
-	cfg := press1Config{
-		transferTo:    resolveBridgeTarget(sc),
-		greetingPath:  s.soundPath(*sc.GreetingTenantID, *sc.GreetingFileKey),
-		bridgeDigit:   sc.BridgeDigit,
-		waitTimeoutMS: sc.WaitTimeoutMS,
-	}
-	if cfg.bridgeDigit == "" {
-		cfg.bridgeDigit = "1"
-	}
-	if cfg.waitTimeoutMS <= 0 {
-		cfg.waitTimeoutMS = 8000
-	}
-	if sc.OptOutDigit != nil {
-		cfg.optOutDigit = *sc.OptOutDigit
-	}
-	if sc.PreBridgeFileKey != nil && sc.PreBridgeTenantID != nil {
-		cfg.preBridgePath = s.soundPath(*sc.PreBridgeTenantID, *sc.PreBridgeFileKey)
-	}
-	return cfg
+	return scriptFlow{}
 }
 
 func (s *Service) soundPath(tenantID int64, fileKey string) string {

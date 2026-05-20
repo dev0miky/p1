@@ -61,6 +61,7 @@ var validTransitions = map[State]map[State]bool{
 		StatePlayingMsg: true,
 		StatePress1:     true,
 		StateOptOut:     true,
+		StateVoicemail:  true,
 		StateCompleted:  true,
 		StateFailed:     true,
 	},
@@ -86,6 +87,7 @@ var validTransitions = map[State]map[State]bool{
 	},
 	StatePlayingMsg: {
 		StateWaitDTMF:  true,
+		StateVoicemail: true,
 		StateCompleted: true,
 		StateFailed:    true,
 	},

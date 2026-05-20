@@ -87,6 +87,15 @@ func TestOptOutShortcutFromAnswered(t *testing.T) {
 	}
 }
 
+func TestVoicemailShortcutFromAnswered(t *testing.T) {
+	if !StateAnswered.CanTransitionTo(StateVoicemail) {
+		t.Error("avmd beep fires from Answered (no AMDRunning step): Answered → Voicemail must be valid")
+	}
+	if !StatePlayingMsg.CanTransitionTo(StateVoicemail) {
+		t.Error("avmd beep can fire while greeting plays: PlayingMsg → Voicemail must be valid")
+	}
+}
+
 func TestEveryNonTerminalStateCanReachAFailureState(t *testing.T) {
 	for _, s := range AllStates() {
 		if s.IsTerminal() {
