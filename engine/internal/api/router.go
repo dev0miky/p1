@@ -257,5 +257,14 @@ func NewRouter(cfg Config) http.Handler {
 		r.Get("/{id}/url", tenRec.url)
 	})
 
+	tenRep := &tenantReports{repo: cfg.Repo}
+	r.Route("/tenant/reports", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireTenant)
+		r.Use(auth.RequireAction(auth.ActionViewReports))
+		r.Get("/", tenRep.report)
+		r.Get("/export", tenRep.export)
+	})
+
 	return r
 }

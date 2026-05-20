@@ -8,6 +8,7 @@ import { ScriptsPage } from "@/pages/scripts";
 import { ListsPage } from "@/pages/lists";
 import { CallerIDsPage } from "@/pages/caller-ids";
 import { AgentsPage } from "@/pages/agents";
+import { ReportsPage } from "@/pages/reports";
 import { LeadsPage } from "@/pages/leads";
 import { DNCPage } from "@/pages/dnc";
 import { AdminTenantsPage } from "@/pages/admin-tenants";
@@ -80,7 +81,7 @@ const callerIdsRoute = createRoute({
 const reportsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/reports",
-  component: () => <Placeholder section="§ reports" title="Reports" body="Real-time wallboard + historical CDR analysis." />,
+  component: ReportsPage,
 });
 
 const agentsRoute = createRoute({
