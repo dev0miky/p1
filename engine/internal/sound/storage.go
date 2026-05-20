@@ -1,14 +1,17 @@
 package sound
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 // Storage holds uploaded sound files on the local filesystem at
@@ -63,6 +66,58 @@ func (s *Storage) Write(tenantID int64, fileKey string, body io.Reader) (WriteRe
 	if err := f.Sync(); err != nil {
 		_ = os.Remove(path)
 		return WriteResult{}, fmt.Errorf("fsync %s: %w", path, err)
+	}
+	return WriteResult{Size: n, SHA256: hex.EncodeToString(h.Sum(nil))}, nil
+}
+
+// WriteTranscoded saves the uploaded audio (any ffmpeg-readable format) as an
+// 8kHz 16-bit mono PCM WAV at {root}/{tenant_id}/{fileKey}. This is the
+// telephony-native format, so FreeSWITCH plays it through mod_sndfile with no
+// per-call resampling. fileKey must end in .wav.
+func (s *Storage) WriteTranscoded(tenantID int64, fileKey string, body io.Reader) (WriteResult, error) {
+	if fileKey == "" {
+		return WriteResult{}, errors.New("sound storage: empty file_key")
+	}
+	dir := filepath.Join(s.root, strconv.FormatInt(tenantID, 10))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return WriteResult{}, fmt.Errorf("mkdir %s: %w", dir, err)
+	}
+
+	tmp, err := os.CreateTemp(dir, "upload-*")
+	if err != nil {
+		return WriteResult{}, fmt.Errorf("temp: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if _, err := io.Copy(tmp, body); err != nil {
+		_ = tmp.Close()
+		return WriteResult{}, fmt.Errorf("buffer upload: %w", err)
+	}
+	_ = tmp.Close()
+
+	dest := filepath.Join(dir, fileKey)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-hide_banner", "-loglevel", "error", "-y",
+		"-i", tmpPath,
+		"-ar", "8000", "-ac", "1", "-c:a", "pcm_s16le",
+		dest,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		_ = os.Remove(dest)
+		return WriteResult{}, fmt.Errorf("transcode: %w: %s", err, string(out))
+	}
+
+	f, err := os.Open(dest)
+	if err != nil {
+		return WriteResult{}, fmt.Errorf("reopen %s: %w", dest, err)
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	n, err := io.Copy(h, f)
+	if err != nil {
+		return WriteResult{}, fmt.Errorf("hash %s: %w", dest, err)
 	}
 	return WriteResult{Size: n, SHA256: hex.EncodeToString(h.Sum(nil))}, nil
 }
