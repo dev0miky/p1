@@ -18,6 +18,7 @@ import (
 	"p1/engine/internal/config"
 	"p1/engine/internal/db"
 	"p1/engine/internal/leadimport"
+	"p1/engine/internal/recording"
 	"p1/engine/internal/sound"
 	"p1/engine/internal/tenant"
 	"p1/engine/migrations"
@@ -89,6 +90,14 @@ func serve(cfg config.Config, logger *slog.Logger) error {
 	}
 	importRunner := leadimport.NewRunner(pool, importStorage, logger)
 
+	var recStore *recording.Store
+	if cfg.MinioEndpoint != "" {
+		recStore, err = recording.NewStore(cfg.MinioEndpoint, cfg.MinioAccessKey, cfg.MinioSecretKey, cfg.MinioBucket, cfg.MinioUseSSL)
+		if err != nil {
+			return fmt.Errorf("recording store init: %w", err)
+		}
+	}
+
 	handler := api.NewRouter(api.Config{
 		Repo:           repo,
 		Issuer:         iss,
@@ -97,6 +106,7 @@ func serve(cfg config.Config, logger *slog.Logger) error {
 		SoundStorage:   soundStorage,
 		ImportStorage:  importStorage,
 		ImportRunner:   importRunner,
+		RecordingStore: recStore,
 	})
 
 	srv := &http.Server{

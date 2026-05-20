@@ -19,6 +19,7 @@ end
 
 local wait_ms = tonumber(wait_ms_str) or 8000
 
+session:execute("record_session", "/recordings/" .. session:get_uuid() .. ".wav")
 session:execute("avmd_start")
 
 local valid = bridge_d

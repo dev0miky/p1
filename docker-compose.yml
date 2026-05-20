@@ -15,6 +15,7 @@ volumes:
   lokidata:
   sounds-data:
   imports-data:
+  recordings-data:
 
 services:
   postgres:
@@ -133,6 +134,7 @@ services:
       - ./deploy/freeswitch/dialplan:/etc/freeswitch/dialplan:ro
       - ./deploy/freeswitch/scripts:/usr/share/freeswitch/scripts:ro
       - sounds-data:/data/sounds:ro
+      - recordings-data:/recordings
 
   coturn:
     image: coturn/coturn:latest
@@ -298,15 +300,24 @@ services:
       args:
         BINARY: recording-uploader
     restart: unless-stopped
-    depends_on:
-      minio:
-        condition: service_healthy
     environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      APP_DATABASE_USER: ${APP_DATABASE_USER:-app_user}
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:-app_user_change_me}
+      JWT_SECRET: ${JWT_SECRET}
       MINIO_ENDPOINT: "minio:9000"
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET_RECORDINGS: ${MINIO_BUCKET_RECORDINGS}
+      RECORDINGS_DIR: /recordings
       LOG_LEVEL: ${LOG_LEVEL}
+    volumes:
+      - recordings-data:/recordings
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     networks: [app]
 
   engine-dnc-sync:

@@ -11,6 +11,8 @@ if greeting == "" then
   return
 end
 
+session:execute("record_session", "/recordings/" .. session:get_uuid() .. ".wav")
+
 local beeps = freeswitch.EventConsumer("CUSTOM", "avmd::beep")
 session:execute("avmd_start")
 

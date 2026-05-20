@@ -17,6 +17,7 @@ import (
 	"p1/engine/internal/fsm"
 	"p1/engine/internal/lead"
 	"p1/engine/internal/leadimport"
+	"p1/engine/internal/recording"
 	"p1/engine/internal/script"
 	"p1/engine/internal/sound"
 	"p1/engine/internal/tenant"
@@ -30,6 +31,7 @@ type Config struct {
 	SoundStorage   *sound.Storage
 	ImportStorage  *leadimport.Storage
 	ImportRunner   *leadimport.Runner
+	RecordingStore *recording.Store
 }
 
 func NewRouter(cfg Config) http.Handler {
@@ -244,6 +246,15 @@ func NewRouter(cfg Config) http.Handler {
 		r.Get("/{id}", tenEA.get)
 		r.Patch("/{id}", tenEA.update)
 		r.Delete("/{id}", tenEA.delete)
+	})
+
+	tenRec := &tenantRecordings{repo: cfg.Repo, rRepo: recording.NewRepo(), store: cfg.RecordingStore}
+	r.Route("/tenant/recordings", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireTenant)
+		r.Use(auth.RequireAction(auth.ActionManageCampaigns))
+		r.Get("/", tenRec.list)
+		r.Get("/{id}/url", tenRec.url)
 	})
 
 	return r
