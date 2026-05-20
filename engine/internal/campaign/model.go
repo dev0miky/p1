@@ -40,6 +40,45 @@ type Campaign struct {
 	UpdatedAt      time.Time
 }
 
+type CallingHoursConfig struct {
+	Enabled     bool `json:"enabled"`
+	OpenHour    int  `json:"open_hour"`
+	CloseHour   int  `json:"close_hour"`
+	AllowSunday bool `json:"allow_sunday"`
+}
+
+// ParseCallingHours reads the campaign's calling_hours JSONB, defaulting to the
+// TCPA-safe window (enabled, 8am-9pm, no Sunday) when the field is empty or
+// omits a value.
+func (c Campaign) ParseCallingHours() CallingHoursConfig {
+	cfg := CallingHoursConfig{Enabled: true, OpenHour: 8, CloseHour: 21}
+	if len(c.CallingHours) == 0 {
+		return cfg
+	}
+	var raw struct {
+		Enabled     *bool `json:"enabled"`
+		OpenHour    *int  `json:"open_hour"`
+		CloseHour   *int  `json:"close_hour"`
+		AllowSunday *bool `json:"allow_sunday"`
+	}
+	if err := json.Unmarshal(c.CallingHours, &raw); err != nil {
+		return cfg
+	}
+	if raw.Enabled != nil {
+		cfg.Enabled = *raw.Enabled
+	}
+	if raw.OpenHour != nil {
+		cfg.OpenHour = *raw.OpenHour
+	}
+	if raw.CloseHour != nil {
+		cfg.CloseHour = *raw.CloseHour
+	}
+	if raw.AllowSunday != nil {
+		cfg.AllowSunday = *raw.AllowSunday
+	}
+	return cfg
+}
+
 type CallConstraint string
 
 const (

@@ -14,6 +14,13 @@ import { CountUp } from "@/components/count-up";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
+interface CallingHours {
+  enabled?: boolean;
+  open_hour?: number;
+  close_hour?: number;
+  allow_sunday?: boolean;
+}
+
 interface Campaign {
   id: number;
   name: string;
@@ -23,6 +30,7 @@ interface Campaign {
   max_abandon_pct: number;
   run_no: number;
   call_constraint: string;
+  calling_hours?: CallingHours;
   created_at: string;
   updated_at: string;
 }
@@ -677,11 +685,106 @@ function SettingsView({ campaign }: { campaign: Campaign }) {
           applied at lead claim time. takes effect on the next dialer tick.
         </p>
       </div>
-      <div className="col-span-2 mt-4">
-        <p className="font-mono text-2xs uppercase tracking-widest text-ink-700">
-          (full settings editor + resource attachments land with the campaign builder wizard PR)
-        </p>
+      <div className="col-span-2 mt-2 pt-6 border-t border-ink-400">
+        <CallingHoursEditor campaign={campaign} />
       </div>
+    </div>
+  );
+}
+
+const HOURS = Array.from({ length: 24 }, (_, h) => h);
+
+function fmtHour(h: number) {
+  const ampm = h < 12 ? "am" : "pm";
+  const hr = h % 12 === 0 ? 12 : h % 12;
+  return `${hr}${ampm}`;
+}
+
+function CallingHoursEditor({ campaign }: { campaign: Campaign }) {
+  const ch = campaign.calling_hours ?? {};
+  const enabled = ch.enabled ?? true;
+  const open = ch.open_hour ?? 8;
+  const close = ch.close_hour ?? 21;
+  const allowSunday = ch.allow_sunday ?? false;
+
+  const patch = useApiMutation<Campaign, { calling_hours: CallingHours }>(
+    `/tenant/campaigns/${campaign.id}`,
+    "PATCH",
+    {
+      invalidate: ["campaign", "campaigns"],
+      onSuccess: () => toast.success("calling hours updated"),
+      onError: (e) => toast.error("update failed", { description: e.message }),
+    },
+  );
+
+  function save(next: Partial<CallingHours>) {
+    patch.mutate({
+      calling_hours: { enabled, open_hour: open, close_hour: close, allow_sunday: allowSunday, ...next },
+    });
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="font-mono text-2xs uppercase tracking-widest text-ink-700">calling hours</p>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={enabled}
+            disabled={patch.isPending}
+            onChange={(e) => save({ enabled: e.target.checked })}
+            className="accent-phosphor"
+          />
+          <span className="font-mono text-2xs uppercase tracking-widest text-ink-800">
+            {enabled ? "enforced" : "off"}
+          </span>
+        </label>
+      </div>
+
+      {enabled ? (
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="font-mono text-2xs uppercase tracking-widest text-ink-700">dial between</span>
+          <select
+            value={open}
+            disabled={patch.isPending}
+            onChange={(e) => save({ open_hour: Number(e.target.value) })}
+            className="bg-ink-50 font-mono text-sm text-ink-950 border border-ink-400 px-2 py-1.5 focus:outline-none focus:border-phosphor"
+          >
+            {HOURS.map((h) => (
+              <option key={h} value={h}>{fmtHour(h)}</option>
+            ))}
+          </select>
+          <span className="font-mono text-2xs uppercase tracking-widest text-ink-700">and</span>
+          <select
+            value={close}
+            disabled={patch.isPending}
+            onChange={(e) => save({ close_hour: Number(e.target.value) })}
+            className="bg-ink-50 font-mono text-sm text-ink-950 border border-ink-400 px-2 py-1.5 focus:outline-none focus:border-phosphor"
+          >
+            {HOURS.slice(1).concat(24).map((h) => (
+              <option key={h} value={h}>{h === 24 ? "12am" : fmtHour(h)}</option>
+            ))}
+          </select>
+          <span className="font-mono text-2xs uppercase tracking-widest text-ink-700">· called party's local time</span>
+          <label className="flex items-center gap-2 cursor-pointer select-none ml-2">
+            <input
+              type="checkbox"
+              checked={allowSunday}
+              disabled={patch.isPending}
+              onChange={(e) => save({ allow_sunday: e.target.checked })}
+              className="accent-phosphor"
+            />
+            <span className="font-mono text-2xs uppercase tracking-widest text-ink-800">allow sunday</span>
+          </label>
+        </div>
+      ) : (
+        <p className="font-mono text-2xs uppercase tracking-widest text-danger">
+          off — dials any hour. you are responsible for TCPA calling-window compliance.
+        </p>
+      )}
+      <p className="mt-2 font-mono text-2xs uppercase tracking-widest text-ink-700">
+        federal TCPA window is 8am–9pm in the called party's timezone.
+      </p>
     </div>
   );
 }
