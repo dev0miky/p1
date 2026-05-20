@@ -5,12 +5,12 @@ end
 session:answer()
 session:sleep(300)
 
-local greeting     = session:getVariable("greeting_sound")   or ""
-local transfer_to  = session:getVariable("transfer_to")      or ""
-local bridge_d     = session:getVariable("bridge_digit")     or "1"
-local opt_out_d    = session:getVariable("opt_out_digit")    or ""
-local wait_ms_str  = session:getVariable("wait_timeout_ms")  or "8000"
-local pre_bridge   = session:getVariable("pre_bridge_sound") or ""
+local greeting    = session:getVariable("greeting_sound")   or ""
+local transfer_to = session:getVariable("transfer_to")      or ""
+local bridge_d    = session:getVariable("bridge_digit")     or "1"
+local opt_out_d   = session:getVariable("opt_out_digit")    or ""
+local wait_ms_str = session:getVariable("wait_timeout_ms")  or "8000"
+local pre_bridge  = session:getVariable("pre_bridge_sound") or ""
 
 if greeting == "" then
   session:hangup("USER_NOT_REGISTERED")
@@ -21,23 +21,15 @@ local wait_ms = tonumber(wait_ms_str) or 8000
 
 session:execute("record_session", "/recordings/" .. session:get_uuid() .. ".wav")
 session:execute("avmd_start")
-session:execute("spandsp_start_dtmf")
 
-local valid = bridge_d
+-- playAndGetDigits plays the greeting AND collects the digit in one step. Unlike
+-- session:execute("playback"), it does not swallow the keypress. The greeting is
+-- interruptible; on no input it returns "" after wait_ms.
+local accept = bridge_d
 if opt_out_d ~= "" then
-  valid = valid .. opt_out_d
+  accept = accept .. opt_out_d
 end
-
-session:setVariable("playback_terminators", valid .. "#")
-session:execute("playback", greeting)
-
-local digit = session:getVariable("playback_terminator_used") or ""
-
-if digit == "" then
-  session:execute("read", string.format("0 1 silence_stream://%d|0 dialer_digit %d %s",
-    wait_ms, wait_ms, valid .. "#"))
-  digit = session:getVariable("dialer_digit") or ""
-end
+local digit = session:playAndGetDigits(0, 1, 1, wait_ms, "#", greeting, "", "[" .. accept .. "]")
 
 if digit == bridge_d then
   if transfer_to == "" then
@@ -46,7 +38,7 @@ if digit == bridge_d then
     return
   end
   if pre_bridge ~= "" then
-    session:execute("playback", pre_bridge)
+    session:streamFile(pre_bridge)
   end
   session:setVariable("press1_action", "transfer")
   session:execute("bridge", transfer_to)
