@@ -13,6 +13,7 @@
     <load module="mod_local_stream"/>
     <load module="mod_native_file"/>
     <load module="mod_sndfile"/>
+    <load module="mod_shout"/>
     <load module="mod_tone_stream"/>
     <load module="mod_avmd"/>
     <load module="mod_callcenter"/>
