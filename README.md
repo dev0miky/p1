@@ -1,6 +1,6 @@
 # p1
 
-**Outbound calling platform — press-1 campaigns and voice broadcast, built for US TCPA compliance.**
+**Outbound calling platform — press-1 campaigns and voice broadcast.**
 
 Self-hosted, multi-tenant, no third-party dialer. Kamailio at the SIP edge, FreeSWITCH for media, a Go engine for pacing and call state, Postgres with row-level security for tenant isolation, and two React frontends. Everything runs in Docker.
 
