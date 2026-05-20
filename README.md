@@ -108,7 +108,7 @@ make test            # run the full test suite
 
 ## Compliance
 
-p1 is built for **US outbound calling under the TCPA**, but the tooling does not make you compliant on its own. Before placing real calls, operators are responsible for: prior express written consent records, federal + state DNC scrubbing, calling-hour windows in the called party's local time, STIR/SHAKEN attestation on owned DIDs, an abandon-rate safe harbor, and recording-disclosure where required. The platform provides the enforcement points; the legal posture is yours.
+Before placing real calls, operators are responsible for: prior express written consent records, federal + state DNC scrubbing, calling-hour windows in the called party's local time, STIR/SHAKEN attestation on owned DIDs, an abandon-rate safe harbor, and recording-disclosure where required. The platform provides the enforcement points; the legal posture is yours.
 
 ## Production
 
