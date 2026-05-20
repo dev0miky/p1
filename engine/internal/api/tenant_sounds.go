@@ -93,18 +93,6 @@ func extensionForUpload(mime, originalFilename string) (string, bool) {
 	return "", false
 }
 
-func mimeForExt(ext string) string {
-	switch strings.ToLower(ext) {
-	case ".wav":
-		return "audio/wav"
-	case ".mp3":
-		return "audio/mpeg"
-	case ".ogg":
-		return "audio/ogg"
-	}
-	return "application/octet-stream"
-}
-
 func (a *tenantSounds) create(w http.ResponseWriter, r *http.Request) {
 	if a.storage == nil {
 		writeError(w, http.StatusInternalServerError, "sound storage not configured")
@@ -138,12 +126,10 @@ func (a *tenantSounds) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	declaredMime := header.Header.Get("Content-Type")
-	ext, ok := extensionForUpload(declaredMime, header.Filename)
-	if !ok {
+	if _, ok := extensionForUpload(declaredMime, header.Filename); !ok {
 		writeError(w, http.StatusBadRequest, "unsupported audio type — wav, mp3, ogg only")
 		return
 	}
-	mime := mimeForExt(ext)
 
 	claims, _ := auth.ClaimsFromContext(r.Context())
 	tid := claims.TenantID
@@ -152,11 +138,14 @@ func (a *tenantSounds) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fileKey := uuid.NewString() + ext
-	res, err := a.storage.Write(tid, fileKey, io.LimitReader(file, maxSoundBytes))
+	// All uploads are transcoded to 8kHz mono PCM WAV so FreeSWITCH plays them
+	// natively (no per-call mp3 resampling, which mangles telephony audio).
+	fileKey := uuid.NewString() + ".wav"
+	mime := "audio/wav"
+	res, err := a.storage.WriteTranscoded(tid, fileKey, io.LimitReader(file, maxSoundBytes))
 	if err != nil {
-		slog.Error("sound storage write failed", "err", err, "tenant", tid, "key", fileKey)
-		writeError(w, http.StatusInternalServerError, "storage write failed")
+		slog.Error("sound transcode failed", "err", err, "tenant", tid, "key", fileKey)
+		writeError(w, http.StatusBadRequest, "could not process audio — must be a valid wav, mp3, or ogg")
 		return
 	}
 
