@@ -24,6 +24,7 @@ type Input struct {
 	OpenHour    int
 	CloseHour   int
 	AllowSunday bool
+	SkipHours   bool
 }
 
 type Preflight struct {
@@ -35,7 +36,7 @@ func New(dncRepo *dnc.Repo) *Preflight {
 }
 
 func (p *Preflight) Check(ctx context.Context, tx pgx.Tx, in Input) (Decision, error) {
-	if d := checkHours(in); !d.Eligible {
+	if d := hoursDecision(in); !d.Eligible {
 		return d, nil
 	}
 	blocked, scope, err := p.dnc.IsBlockedTx(ctx, tx, in.PhoneE164)
@@ -46,6 +47,13 @@ func (p *Preflight) Check(ctx context.Context, tx pgx.Tx, in Input) (Decision, e
 		return Decision{Eligible: false, Reason: "dnc:" + scope}, nil
 	}
 	return Eligible, nil
+}
+
+func hoursDecision(in Input) Decision {
+	if in.SkipHours {
+		return Eligible
+	}
+	return checkHours(in)
 }
 
 func checkHours(in Input) Decision {

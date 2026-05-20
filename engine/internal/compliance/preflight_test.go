@@ -105,3 +105,14 @@ func TestHoursRejectsInvertedWindow(t *testing.T) {
 		t.Fatalf("inverted window should be invalid, got %+v", d)
 	}
 }
+
+func TestSkipHoursBypassesWindow(t *testing.T) {
+	// 3am Eastern — normally blocked, but SkipHours must let it through.
+	at := mustTime(t, "2006-01-02 15:04 MST", "2026-03-04 03:00 EST")
+	if d := hoursDecision(Input{Now: at, Timezone: "America/New_York"}); d.Eligible {
+		t.Fatal("3am without skip should be blocked")
+	}
+	if d := hoursDecision(Input{Now: at, Timezone: "America/New_York", SkipHours: true}); !d.Eligible {
+		t.Fatalf("SkipHours should bypass the window, got %+v", d)
+	}
+}

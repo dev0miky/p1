@@ -198,14 +198,19 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 		tz = *l.Timezone
 	}
 
+	hours := c.ParseCallingHours()
 	var decision compliance.Decision
 	err := db.WithCtx(ctx, s.cfg.Pool, db.Ctx{Role: "super_admin", TenantID: c.TenantID}, func(tx pgx.Tx) error {
 		var err error
 		decision, err = s.pre.Check(ctx, tx, compliance.Input{
-			TenantID:  c.TenantID,
-			PhoneE164: l.PhoneE164,
-			Now:       time.Now(),
-			Timezone:  tz,
+			TenantID:    c.TenantID,
+			PhoneE164:   l.PhoneE164,
+			Now:         time.Now(),
+			Timezone:    tz,
+			OpenHour:    hours.OpenHour,
+			CloseHour:   hours.CloseHour,
+			AllowSunday: hours.AllowSunday,
+			SkipHours:   !hours.Enabled,
 		})
 		return err
 	})
