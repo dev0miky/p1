@@ -19,6 +19,7 @@
     <param name="dialplan" value="XML"/>
     <param name="dtmf-duration" value="2000"/>
     <param name="dtmf-type" value="rfc2833"/>
+    <param name="liberal-dtmf" value="true"/>
     <param name="inbound-codec-prefs" value="$${outbound_codec_prefs}"/>
     <param name="outbound-codec-prefs" value="$${outbound_codec_prefs}"/>
     <param name="auth-calls" value="false"/>
