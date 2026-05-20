@@ -11,4 +11,6 @@
   <X-PRE-PROCESS cmd="set" data="external_sip_port=5070"/>
   <X-PRE-PROCESS cmd="set" data="global_codec_prefs=OPUS,PCMU,PCMA"/>
   <X-PRE-PROCESS cmd="set" data="outbound_codec_prefs=PCMU,PCMA,OPUS"/>
+  <X-PRE-PROCESS cmd="set" data="RECORD_CREATE_FILE_DIRS=true"/>
+  <X-PRE-PROCESS cmd="set" data="RECORD_STEREO=true"/>
 </include>

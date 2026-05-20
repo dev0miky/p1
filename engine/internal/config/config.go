@@ -21,6 +21,14 @@ type Config struct {
 	SuperAdminPasswd string
 	LogLevel         string
 	AllowedOrigins   []string
+
+	MinioEndpoint  string
+	MinioAccessKey string
+	MinioSecretKey string
+	MinioBucket    string
+	MinioUseSSL    bool
+	RecordingsDir  string
+	RetentionYears int
 }
 
 func Load() (Config, error) {
@@ -32,6 +40,13 @@ func Load() (Config, error) {
 		SuperAdminEmail:  os.Getenv("SUPER_ADMIN_EMAIL"),
 		SuperAdminPasswd: os.Getenv("SUPER_ADMIN_PASSWORD"),
 		LogLevel:         getEnv("LOG_LEVEL", "info"),
+		MinioEndpoint:    os.Getenv("MINIO_ENDPOINT"),
+		MinioAccessKey:   os.Getenv("MINIO_ACCESS_KEY"),
+		MinioSecretKey:   os.Getenv("MINIO_SECRET_KEY"),
+		MinioBucket:      getEnv("MINIO_BUCKET_RECORDINGS", "recordings"),
+		MinioUseSSL:      os.Getenv("MINIO_USE_SSL") == "true",
+		RecordingsDir:    getEnv("RECORDINGS_DIR", "/recordings"),
+		RetentionYears:   atoiDefault(os.Getenv("RECORDING_RETENTION_YEARS"), 4),
 	}
 	secret := os.Getenv("JWT_SECRET")
 	if len(secret) < 32 {
@@ -81,4 +96,15 @@ func getEnv(k, d string) string {
 		return v
 	}
 	return d
+}
+
+func atoiDefault(s string, d int) int {
+	if s == "" {
+		return d
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return d
+	}
+	return n
 }

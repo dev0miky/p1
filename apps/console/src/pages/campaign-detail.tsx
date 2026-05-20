@@ -11,7 +11,8 @@ import {
 } from "@/components/ui";
 import { Table, type Column } from "@/components/table";
 import { CountUp } from "@/components/count-up";
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface Campaign {
   id: number;
@@ -140,6 +141,11 @@ export function CampaignDetailPage() {
     ["campaign-calls", id],
     `/tenant/campaigns/${id}/calls?limit=25`,
   );
+  const recsQ = useApiQuery<{ recordings: { id: number; call_uuid: string }[] }>(
+    ["campaign-recordings", id],
+    `/tenant/recordings/?campaign_id=${id}`,
+  );
+  const recByUUID = new Map((recsQ.data?.recordings ?? []).map((r) => [r.call_uuid, r.id]));
 
   const toggle = useApiMutation<Campaign, { status: string }>(`/tenant/campaigns/${id}`, "PATCH", {
     invalidate: ["campaigns"],
@@ -283,6 +289,7 @@ export function CampaignDetailPage() {
           calls={callsQ.data?.calls ?? []}
           loading={callsQ.isLoading}
           error={callsQ.error ? (callsQ.error as ApiError).message : null}
+          recByUUID={recByUUID}
         />
       </motion.div>
 
@@ -546,10 +553,12 @@ function CallsTable({
   calls,
   loading,
   error,
+  recByUUID,
 }: {
   calls: CallRow[];
   loading: boolean;
   error: string | null;
+  recByUUID: Map<string, number>;
 }) {
   const columns: Column<CallRow>[] = [
     {
@@ -597,8 +606,41 @@ function CallsTable({
           <span className="text-ink-700">—</span>
         ),
     },
+    {
+      key: "recording",
+      header: "Recording",
+      width: "0.8fr",
+      render: (c) => {
+        const recId = recByUUID.get(c.uuid);
+        return recId ? <PlayRecordingBtn recordingId={recId} /> : <span className="text-ink-700">—</span>;
+      },
+    },
   ];
   return <Table<CallRow> columns={columns} data={calls} rowKey={(c) => c.uuid} loading={loading} error={error} compact striped={false} />;
+}
+
+function PlayRecordingBtn({ recordingId }: { recordingId: number }) {
+  const token = useAuth((s) => s.token);
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const res = await api<{ url: string }>(`/tenant/recordings/${recordingId}/url`, { token });
+          window.open(res.url, "_blank", "noopener");
+        } catch {
+          toast.error("could not load recording");
+        } finally {
+          setBusy(false);
+        }
+      }}
+      disabled={busy}
+      className="font-mono text-2xs uppercase tracking-widest text-phosphor hover:text-phosphor-glow disabled:opacity-50"
+    >
+      {busy ? "…" : "▶ play"}
+    </button>
+  );
 }
 
 function SettingsView({ campaign }: { campaign: Campaign }) {
