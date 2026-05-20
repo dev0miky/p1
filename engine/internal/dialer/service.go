@@ -502,7 +502,7 @@ func (s *Service) pickScriptFlow(ctx context.Context, tenantID, campaignID int64
 			}
 			f := scriptFlow{
 				kind:          "press1",
-				transferTo:    target,
+				transferTo:    s.bridgeDialString(target),
 				greetingPath:  greeting,
 				bridgeDigit:   sc.BridgeDigit,
 				waitTimeoutMS: sc.WaitTimeoutMS,
@@ -527,6 +527,16 @@ func (s *Service) pickScriptFlow(ctx context.Context, tenantID, campaignID int64
 
 func (s *Service) soundPath(tenantID int64, fileKey string) string {
 	return s.cfg.SoundRoot + "/" + strconv.FormatInt(tenantID, 10) + "/" + fileKey
+}
+
+// bridgeDialString turns a bare agent target (a number or extension) into a
+// full FreeSWITCH dial-string via the configured gateway. A target that already
+// contains "/" (e.g. sofia/gateway/foo/+1..., user/1001) is used verbatim.
+func (s *Service) bridgeDialString(target string) string {
+	if strings.Contains(target, "/") {
+		return target
+	}
+	return "sofia/gateway/" + s.cfg.GatewayName + "/" + target
 }
 
 func resolveBridgeTarget(sc *campaign.AttachedScript) string {
