@@ -118,6 +118,10 @@ services:
       context: ./deploy/freeswitch
     restart: unless-stopped
     network_mode: host
+    # VPS has no IPv6 route; pin SIP provider hostnames to IPv4 so FreeSWITCH
+    # doesn't pick their AAAA record and hang. (TLS SNI/realm stay the hostname.)
+    extra_hosts:
+      - "sip.linphone.org:176.31.149.179"
     cap_add:
       - NET_ADMIN
       - SYS_NICE
