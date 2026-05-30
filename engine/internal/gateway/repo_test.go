@@ -409,6 +409,142 @@ func TestActiveNameTx(t *testing.T) {
 	}
 }
 
+func TestCiphertextAtRest(t *testing.T) {
+	pool := testutil.TestPool(t)
+	repo := gateway.NewRepo(testEncKey)
+	ctx := context.Background()
+
+	plaintext := "at-rest-secret"
+	g := makeGateway("cipher-a")
+	g.Password = &plaintext
+
+	var id int64
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		c, err := repo.CreateTx(ctx, tx, g)
+		id = c.ID
+		return err
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		var raw []byte
+		if err := tx.QueryRow(ctx, `SELECT password_enc FROM gateways WHERE id=$1`, id).Scan(&raw); err != nil {
+			return err
+		}
+		if len(raw) == 0 {
+			t.Fatal("password_enc is empty — not stored")
+		}
+		if string(raw) == plaintext {
+			t.Fatal("password_enc equals plaintext — not encrypted")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("raw read: %v", err)
+	}
+}
+
+func TestListEnabledWithSecretTx(t *testing.T) {
+	pool := testutil.TestPool(t)
+	repo := gateway.NewRepo(testEncKey)
+	ctx := context.Background()
+
+	pw := "enabled-secret"
+	enabled := makeGateway("lews-enabled")
+	enabled.Password = &pw
+
+	disabled := makeGateway("lews-disabled")
+	disabled.Enabled = false
+
+	var enabledID int64
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		e, err := repo.CreateTx(ctx, tx, enabled)
+		if err != nil {
+			return err
+		}
+		enabledID = e.ID
+		_, err = repo.CreateTx(ctx, tx, disabled)
+		return err
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		list, err := repo.ListEnabledWithSecretTx(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if len(list) != 1 {
+			t.Fatalf("expected 1 enabled gateway, got %d", len(list))
+		}
+		if list[0].ID != enabledID {
+			t.Fatalf("wrong gateway returned: got id %d, want %d", list[0].ID, enabledID)
+		}
+		if list[0].Password == nil || *list[0].Password != pw {
+			t.Fatalf("password not decrypted: %v", list[0].Password)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("list enabled with secret: %v", err)
+	}
+}
+
+func TestDeleteTx(t *testing.T) {
+	pool := testutil.TestPool(t)
+	repo := gateway.NewRepo(testEncKey)
+	ctx := context.Background()
+
+	var id int64
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		c, err := repo.CreateTx(ctx, tx, makeGateway("del-a"))
+		id = c.ID
+		return err
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		return repo.DeleteTx(ctx, tx, id)
+	}); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		_, err := repo.GetTx(ctx, tx, id)
+		return err
+	}); err != gateway.ErrNotFound {
+		t.Fatalf("expected ErrNotFound after delete, got: %v", err)
+	}
+
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		return repo.DeleteTx(ctx, tx, id)
+	}); err != gateway.ErrNotFound {
+		t.Fatalf("expected ErrNotFound deleting non-existent, got: %v", err)
+	}
+}
+
+func TestErrNotFoundMapping(t *testing.T) {
+	pool := testutil.TestPool(t)
+	repo := gateway.NewRepo(testEncKey)
+	ctx := context.Background()
+
+	const bogusID = int64(999999999)
+
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		_, err := repo.GetTx(ctx, tx, bogusID)
+		return err
+	}); err != gateway.ErrNotFound {
+		t.Fatalf("GetTx non-existent: expected ErrNotFound, got: %v", err)
+	}
+
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		_, err := repo.UpdateTx(ctx, tx, bogusID, gateway.UpdatePatch{Proxy: "sip.x.com"})
+		return err
+	}); err != gateway.ErrNotFound {
+		t.Fatalf("UpdateTx non-existent: expected ErrNotFound, got: %v", err)
+	}
+}
+
 func TestRLSTenantCannotSeeGateways(t *testing.T) {
 	pool := testutil.TestPool(t)
 	repo := gateway.NewRepo(testEncKey)
