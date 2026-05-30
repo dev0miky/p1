@@ -29,6 +29,11 @@ type Config struct {
 	MinioUseSSL    bool
 	RecordingsDir  string
 	RetentionYears int
+
+	ESLAddr       string
+	ESLPassword   string
+	GatewayEncKey string
+	FSXMLSecret   string
 }
 
 func Load() (Config, error) {
@@ -78,6 +83,13 @@ func Load() (Config, error) {
 		appURL = derived
 	}
 	c.AppDatabaseURL = appURL
+
+	eslHost := getEnv("FREESWITCH_ESL_HOST", "host.docker.internal")
+	eslPort := getEnv("FREESWITCH_ESL_PORT", "8021")
+	c.ESLAddr = eslHost + ":" + eslPort
+	c.ESLPassword = getEnv("FREESWITCH_ESL_PASSWORD", "ClueCon")
+	c.GatewayEncKey = os.Getenv("GATEWAY_ENC_KEY")
+	c.FSXMLSecret = os.Getenv("FS_XML_CURL_SECRET")
 
 	return c, nil
 }
