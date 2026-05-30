@@ -12,9 +12,11 @@ import (
 	"p1/engine/internal/auth"
 	"p1/engine/internal/callerid"
 	"p1/engine/internal/campaign"
+	"p1/engine/internal/db"
 	"p1/engine/internal/dnc"
 	"p1/engine/internal/extagent"
 	"p1/engine/internal/fsm"
+	"p1/engine/internal/gateway"
 	"p1/engine/internal/lead"
 	"p1/engine/internal/leadimport"
 	"p1/engine/internal/recording"
@@ -32,6 +34,10 @@ type Config struct {
 	ImportStorage  *leadimport.Storage
 	ImportRunner   *leadimport.Runner
 	RecordingStore *recording.Store
+	GatewayRepo    *gateway.Repo
+	Pool           *db.Pool
+	Provisioner    *gateway.Provisioner
+	FSXMLSecret    string
 }
 
 func NewRouter(cfg Config) http.Handler {
@@ -265,6 +271,23 @@ func NewRouter(cfg Config) http.Handler {
 		r.Get("/", tenRep.report)
 		r.Get("/export", tenRep.export)
 	})
+
+	adminGW := &adminGateways{repo: cfg.GatewayRepo, pool: cfg.Pool, prov: cfg.Provisioner, log: cfg.Logger}
+	r.Route("/admin/gateways", func(r chi.Router) {
+		r.Use(auth.RequireAuth(cfg.Issuer))
+		r.Use(auth.RequireAction(auth.ActionManageTenants))
+		r.Post("/", adminGW.create)
+		r.Get("/", adminGW.list)
+		r.Get("/{id}", adminGW.get)
+		r.Patch("/{id}", adminGW.update)
+		r.Delete("/{id}", adminGW.delete)
+		r.Post("/{id}/activate", adminGW.activate)
+		r.Post("/{id}/register", adminGW.register)
+	})
+
+	fsx := &fsXML{repo: cfg.GatewayRepo, pool: cfg.Pool, secret: cfg.FSXMLSecret}
+	r.Post("/fs/xml", fsx.handle)
+	r.Get("/fs/xml", fsx.handle)
 
 	return r
 }

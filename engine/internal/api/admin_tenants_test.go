@@ -13,21 +13,28 @@ import (
 
 	"p1/engine/internal/api"
 	"p1/engine/internal/auth"
+	"p1/engine/internal/db"
+	"p1/engine/internal/gateway"
 	"p1/engine/internal/leadimport"
 	"p1/engine/internal/tenant"
 	"p1/engine/internal/testutil"
 )
 
+const testFSXMLSecret = "test-fs-secret"
+
 type stack struct {
 	router http.Handler
 	iss    *auth.Issuer
 	repo   *tenant.Repo
+	gwRepo *gateway.Repo
+	pool   *db.Pool
 }
 
 func newStack(t *testing.T) stack {
 	t.Helper()
 	pool := testutil.TestPool(t)
 	repo := tenant.NewRepo(pool)
+	gwRepo := gateway.NewRepo("test-enc-key-0123456789")
 	iss := auth.NewIssuer([]byte("test-secret-32-bytes-long-aaaaaa"), "p1", time.Hour)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -41,8 +48,11 @@ func newStack(t *testing.T) stack {
 		Logger:        logger,
 		ImportStorage: importStorage,
 		ImportRunner:  leadimport.NewRunner(pool, importStorage, logger),
+		GatewayRepo:   gwRepo,
+		Pool:          pool,
+		FSXMLSecret:   testFSXMLSecret,
 	})
-	return stack{router: router, iss: iss, repo: repo}
+	return stack{router: router, iss: iss, repo: repo, gwRepo: gwRepo, pool: pool}
 }
 
 func (s stack) tokenFor(t *testing.T, userID, tenantID int64, role string) string {
