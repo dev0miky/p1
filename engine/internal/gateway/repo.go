@@ -17,19 +17,21 @@ const cols = `id, name, description, proxy, register, username,
   transport, expire_seconds, retry_seconds, caller_id_in_from, extra_params,
   enabled, is_active, register_status, register_status_at, created_at, updated_at`
 
-func scan(row pgx.Row, g *Gateway) error {
-	var extra []byte
-	if err := row.Scan(
+func scan(row pgx.Row, g *Gateway, extra ...any) error {
+	var raw []byte
+	dest := []any{
 		&g.ID, &g.Name, &g.Description, &g.Proxy, &g.Register, &g.Username,
 		&g.HasPassword, &g.Realm, &g.FromUser, &g.FromDomain, &g.Transport,
-		&g.ExpireSeconds, &g.RetrySeconds, &g.CallerIDInFrom, &extra,
+		&g.ExpireSeconds, &g.RetrySeconds, &g.CallerIDInFrom, &raw,
 		&g.Enabled, &g.IsActive, &g.RegisterStatus, &g.RegisterStatusAt,
 		&g.CreatedAt, &g.UpdatedAt,
-	); err != nil {
+	}
+	dest = append(dest, extra...)
+	if err := row.Scan(dest...); err != nil {
 		return err
 	}
-	if len(extra) > 0 {
-		return json.Unmarshal(extra, &g.ExtraParams)
+	if len(raw) > 0 {
+		return json.Unmarshal(raw, &g.ExtraParams)
 	}
 	g.ExtraParams = map[string]string{}
 	return nil
@@ -98,9 +100,7 @@ func (r *Repo) ListTx(ctx context.Context, tx pgx.Tx) ([]Gateway, error) {
 }
 
 func (r *Repo) ListEnabledWithSecretTx(ctx context.Context, tx pgx.Tx) ([]Gateway, error) {
-	rows, err := tx.Query(ctx, `
-		SELECT `+cols+`, pgp_sym_decrypt(password_enc, $1)
-		FROM gateways WHERE enabled ORDER BY id`, r.encKey)
+	rows, err := tx.Query(ctx, `SELECT `+cols+`, pgp_sym_decrypt(password_enc, $1) FROM gateways WHERE enabled ORDER BY id`, r.encKey)
 	if err != nil {
 		return nil, err
 	}
@@ -108,21 +108,9 @@ func (r *Repo) ListEnabledWithSecretTx(ctx context.Context, tx pgx.Tx) ([]Gatewa
 	var out []Gateway
 	for rows.Next() {
 		var g Gateway
-		var extra []byte
 		var pw *string
-		if err := rows.Scan(
-			&g.ID, &g.Name, &g.Description, &g.Proxy, &g.Register, &g.Username,
-			&g.HasPassword, &g.Realm, &g.FromUser, &g.FromDomain, &g.Transport,
-			&g.ExpireSeconds, &g.RetrySeconds, &g.CallerIDInFrom, &extra,
-			&g.Enabled, &g.IsActive, &g.RegisterStatus, &g.RegisterStatusAt,
-			&g.CreatedAt, &g.UpdatedAt, &pw,
-		); err != nil {
+		if err := scan(rows, &g, &pw); err != nil {
 			return nil, err
-		}
-		if len(extra) > 0 {
-			_ = json.Unmarshal(extra, &g.ExtraParams)
-		} else {
-			g.ExtraParams = map[string]string{}
 		}
 		g.Password = pw
 		out = append(out, g)
