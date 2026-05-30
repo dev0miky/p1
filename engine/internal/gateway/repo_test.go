@@ -361,6 +361,18 @@ func TestSetStatusTx(t *testing.T) {
 	}
 }
 
+func TestSetStatusTxNotFound(t *testing.T) {
+	pool := testutil.TestPool(t)
+	repo := gateway.NewRepo(testEncKey)
+	ctx := context.Background()
+
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		return repo.SetStatusTx(ctx, tx, "no-such-gateway", "registered")
+	}); err != gateway.ErrNotFound {
+		t.Fatalf("expected ErrNotFound for non-existent name, got: %v", err)
+	}
+}
+
 func TestActiveNameTx(t *testing.T) {
 	pool := testutil.TestPool(t)
 	repo := gateway.NewRepo(testEncKey)
