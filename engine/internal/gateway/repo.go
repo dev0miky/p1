@@ -200,9 +200,15 @@ func (r *Repo) ActivateTx(ctx context.Context, tx pgx.Tx, id int64) error {
 }
 
 func (r *Repo) SetStatusTx(ctx context.Context, tx pgx.Tx, name, status string) error {
-	_, err := tx.Exec(ctx,
+	tag, err := tx.Exec(ctx,
 		`UPDATE gateways SET register_status=$2, register_status_at=now() WHERE name=$1`, name, status)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repo) ActiveNameTx(ctx context.Context, tx pgx.Tx) (string, error) {

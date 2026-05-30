@@ -259,6 +259,23 @@ func TestGatewayInvalidTransportReturns400(t *testing.T) {
 	}
 }
 
+func TestGatewayCreateRegisterTrueWithoutUsernameReturns400(t *testing.T) {
+	s := newStack(t)
+	tok := s.tokenFor(t, 1, 0, "super_admin")
+
+	w := s.do(t, "POST", "/admin/gateways/", tok, map[string]any{
+		"name":     "reg-no-user",
+		"proxy":    "sip.carrier.example.com",
+		"register": true,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "username required") {
+		t.Fatalf("expected username required message, got: %s", w.Body.String())
+	}
+}
+
 func TestFSXMLWrongSecretReturns401(t *testing.T) {
 	s := newStack(t)
 

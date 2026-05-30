@@ -1,7 +1,6 @@
 package api
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -16,7 +15,6 @@ import (
 	"p1/engine/internal/audit"
 	"p1/engine/internal/auth"
 	"p1/engine/internal/db"
-	"p1/engine/internal/fsxml"
 	"p1/engine/internal/gateway"
 )
 
@@ -131,6 +129,10 @@ func (a *adminGateways) create(w http.ResponseWriter, r *http.Request) {
 	if req.RetrySeconds <= 0 {
 		req.RetrySeconds = 30
 	}
+	if req.Register && (req.Username == nil || *req.Username == "") {
+		writeError(w, http.StatusBadRequest, "username required when register is true")
+		return
+	}
 
 	claims, _ := auth.ClaimsFromContext(r.Context())
 
@@ -232,7 +234,6 @@ func (a *adminGateways) get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toGatewayResponse(g))
 }
 
-// updateGatewayRequest uses *string for optional fields; password only applied when non-empty string present.
 type updateGatewayRequest struct {
 	Description    *string           `json:"description"`
 	Proxy          string            `json:"proxy"`
@@ -472,104 +473,14 @@ func (a *adminGateways) register(w http.ResponseWriter, r *http.Request) {
 			UserAgent:  r.UserAgent(),
 		})
 	})
+	if errors.Is(err, gateway.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "gateway not found")
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "set status failed")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"register_status": status})
-}
-
-// fsXML serves FreeSWITCH mod_xml_curl requests. Not JWT-authed — gated by shared secret via Basic auth password or X-FS-Secret header.
-type fsXML struct {
-	repo   *gateway.Repo
-	pool   *db.Pool
-	secret string
-}
-
-func (f *fsXML) handle(w http.ResponseWriter, r *http.Request) {
-	if f.secret == "" {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	var provided string
-	if _, pw, ok := r.BasicAuth(); ok {
-		provided = pw
-	} else if h := r.Header.Get("X-FS-Secret"); h != "" {
-		provided = h
-	}
-
-	if subtle.ConstantTimeCompare([]byte(provided), []byte(f.secret)) != 1 {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	if err := r.ParseForm(); err != nil {
-		w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-		w.Write([]byte(fsxml.NotFound()))
-		return
-	}
-
-	section := r.FormValue("section")
-	keyValue := r.FormValue("key_value")
-
-	if section != "configuration" || keyValue != "sofia.conf" {
-		w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-		w.Write([]byte(fsxml.NotFound()))
-		return
-	}
-
-	ctx := r.Context()
-	var gws []gateway.Gateway
-	err := db.WithCtx(ctx, f.pool, db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
-		var err error
-		gws, err = f.repo.ListEnabledWithSecretTx(ctx, tx)
-		return err
-	})
-	if err != nil {
-		w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-		w.Write([]byte(fsxml.NotFound()))
-		return
-	}
-
-	views := make([]fsxml.GatewayView, 0, len(gws))
-	for _, g := range gws {
-		v := fsxml.GatewayView{
-			Name:           g.Name,
-			Proxy:          g.Proxy,
-			Register:       g.Register,
-			Transport:      string(g.Transport),
-			CallerIDInFrom: g.CallerIDInFrom,
-			ExpireSeconds:  g.ExpireSeconds,
-			RetrySeconds:   g.RetrySeconds,
-			Extra:          g.ExtraParams,
-		}
-		if g.Username != nil {
-			v.Username = *g.Username
-		}
-		if g.Password != nil {
-			v.Password = *g.Password
-		}
-		if g.Realm != nil {
-			v.Realm = *g.Realm
-		}
-		if g.FromUser != nil {
-			v.FromUser = *g.FromUser
-		}
-		if g.FromDomain != nil {
-			v.FromDomain = *g.FromDomain
-		}
-		views = append(views, v)
-	}
-
-	out, err := fsxml.RenderSofia(views)
-	if err != nil {
-		w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-		w.Write([]byte(fsxml.NotFound()))
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-	w.Write([]byte(out))
 }
