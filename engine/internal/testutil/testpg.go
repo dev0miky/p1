@@ -26,13 +26,14 @@ func TestPool(t *testing.T) *pgxpool.Pool {
 	if err != nil {
 		t.Fatalf("sql open: %v", err)
 	}
-	if _, err := sqlDB.Exec(`DROP TABLE IF EXISTS goose_db_version, audit_log, recordings, call_events, call_state, opt_outs, dnc_entries, campaign_sounds, campaign_scripts, campaign_lists, campaign_caller_ids, caller_ids, lead_import_jobs, leads, lead_lists, scripts, external_agents, sounds, campaigns, users, tenants CASCADE`); err != nil {
+	if _, err := sqlDB.Exec(`DROP TABLE IF EXISTS goose_db_version, audit_log, recordings, call_events, call_state, opt_outs, dnc_entries, campaign_sounds, campaign_scripts, campaign_lists, campaign_caller_ids, caller_ids, lead_import_jobs, leads, lead_lists, scripts, external_agents, sounds, campaigns, users, tenants, gateways CASCADE`); err != nil {
 		t.Fatalf("drop: %v", err)
 	}
 	if _, err := sqlDB.Exec(`
 		DO $$ BEGIN
 			CREATE ROLE app_user LOGIN PASSWORD 'app_user_change_me' NOSUPERUSER;
 		EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+		ALTER ROLE app_user LOGIN PASSWORD 'app_user_change_me';
 	`); err != nil {
 		t.Fatalf("role: %v", err)
 	}
