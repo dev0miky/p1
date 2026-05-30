@@ -28,7 +28,7 @@ type Gateway struct {
 	Proxy            string
 	Register         bool
 	Username         *string
-	Password         *string // plaintext in-memory only; never serialized to API
+	Password         *string `json:"-"` // plaintext in-memory only; never serialized to API
 	HasPassword      bool    // set on reads so the API/UI can show "password set"
 	Realm            *string
 	FromUser         *string

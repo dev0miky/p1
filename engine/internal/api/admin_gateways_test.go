@@ -338,6 +338,27 @@ func TestFSXMLUnknownKeyValueReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestGatewayListWithoutAuthReturns401(t *testing.T) {
+	s := newStack(t)
+	w := s.do(t, "GET", "/admin/gateways/", "", nil)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("want 401, got %d", w.Code)
+	}
+}
+
+func TestGatewayRegisterWithNilProvisionerReturns503(t *testing.T) {
+	s := newStack(t)
+	tok := s.tokenFor(t, 1, 0, "super_admin")
+
+	gw := makeGW(t, s, "reg-503-gw")
+	id := itoa(int64(gw["id"].(float64)))
+
+	w := s.do(t, "POST", "/admin/gateways/"+id+"/register", tok, nil)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
 func TestFSXMLViaXFSSecretHeader(t *testing.T) {
 	s := newStack(t)
 

@@ -265,6 +265,14 @@ func (a *adminGateways) update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "transport must be udp, tcp, or tls")
 		return
 	}
+	if req.ExpireSeconds != nil && *req.ExpireSeconds <= 0 {
+		writeError(w, http.StatusBadRequest, "expire_seconds must be positive")
+		return
+	}
+	if req.RetrySeconds != nil && *req.RetrySeconds <= 0 {
+		writeError(w, http.StatusBadRequest, "retry_seconds must be positive")
+		return
+	}
 
 	patch := gateway.UpdatePatch{
 		Description:    req.Description,
@@ -428,7 +436,7 @@ func (a *adminGateways) register(w http.ResponseWriter, r *http.Request) {
 	claims, _ := auth.ClaimsFromContext(r.Context())
 
 	var g gateway.Gateway
-	err = db.WithCtx(r.Context(), a.pool, db.Ctx{Role: claims.Role}, func(tx pgx.Tx) error {
+	err = db.WithCtx(r.Context(), a.pool, db.Ctx{Role: claims.Role, UserID: claims.UserID}, func(tx pgx.Tx) error {
 		var err error
 		g, err = a.repo.GetTx(r.Context(), tx, id)
 		return err
@@ -448,8 +456,21 @@ func (a *adminGateways) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = db.WithCtx(r.Context(), a.pool, db.Ctx{Role: claims.Role}, func(tx pgx.Tx) error {
-		return a.repo.SetStatusTx(r.Context(), tx, g.Name, status)
+	err = db.WithCtx(r.Context(), a.pool, db.Ctx{Role: claims.Role, UserID: claims.UserID}, func(tx pgx.Tx) error {
+		if err := a.repo.SetStatusTx(r.Context(), tx, g.Name, status); err != nil {
+			return err
+		}
+		return audit.Log(r.Context(), tx, audit.Entry{
+			RequestID:  middleware.GetReqID(r.Context()),
+			ActorType:  "user",
+			ActorID:    strconv.FormatInt(claims.UserID, 10),
+			EntityType: "gateway",
+			EntityID:   strconv.FormatInt(id, 10),
+			Action:     "register",
+			After:      map[string]any{"register_status": status},
+			IP:         clientIP(r),
+			UserAgent:  r.UserAgent(),
+		})
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "set status failed")
