@@ -122,6 +122,13 @@ services:
     # doesn't pick their AAAA record and hang. (TLS SNI/realm stay the hostname.)
     extra_hosts:
       - "sip.linphone.org:176.31.149.179"
+    entrypoint: >
+      /bin/sh -c "
+      printf '<include><X-PRE-PROCESS cmd=\"set\" data=\"fs_xml_curl_secret=%s\"/></include>' \"$$FS_XML_CURL_SECRET\" > /etc/freeswitch/env_vars.xml &&
+      exec /docker-entrypoint.sh
+      "
+    environment:
+      FS_XML_CURL_SECRET: ${FS_XML_CURL_SECRET}
     cap_add:
       - NET_ADMIN
       - SYS_NICE
@@ -245,6 +252,8 @@ services:
       MINIO_BUCKET_RECORDINGS: ${MINIO_BUCKET_RECORDINGS}
       SOUND_STORAGE_DIR: /data/sounds
       IMPORT_STORAGE_DIR: /data/imports
+      GATEWAY_ENC_KEY: ${GATEWAY_ENC_KEY}
+      FS_XML_CURL_SECRET: ${FS_XML_CURL_SECRET}
       LOG_LEVEL: ${LOG_LEVEL}
     volumes:
       - sounds-data:/data/sounds
@@ -278,6 +287,7 @@ services:
       DIALER_GATEWAY: ${DIALER_GATEWAY:-loopback}
       DIALER_FORCE_DEST: ${DIALER_FORCE_DEST:-}
       DIALER_TEST_PLAYBACK: ${DIALER_TEST_PLAYBACK:-}
+      GATEWAY_ENC_KEY: ${GATEWAY_ENC_KEY}
       LOG_LEVEL: ${LOG_LEVEL}
     extra_hosts:
       - "host.docker.internal:host-gateway"

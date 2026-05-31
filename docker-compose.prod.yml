@@ -26,6 +26,8 @@ services:
         limits: { cpus: "4", memory: 4G }
 
   engine-api:
+    ports:
+      - "127.0.0.1:8080:8080"
     deploy:
       replicas: 2
       resources:

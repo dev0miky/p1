@@ -8,6 +8,7 @@
     <load module="mod_commands"/>
     <load module="mod_dptools"/>
     <load module="mod_dialplan_xml"/>
+    <load module="mod_xml_curl"/>
     <load module="mod_xml_cdr"/>
     <load module="mod_cdr_csv"/>
     <load module="mod_local_stream"/>
