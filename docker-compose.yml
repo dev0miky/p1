@@ -119,10 +119,13 @@ services:
       context: ./deploy/freeswitch
     restart: unless-stopped
     network_mode: host
-    # VPS has no IPv6 route; pin SIP provider hostnames to IPv4 so FreeSWITCH
-    # doesn't pick their AAAA record and hang. (TLS SNI/realm stay the hostname.)
+    # VPS has no IPv6 route. sip.linphone.org resolves SIP via SRV to sip11/sip12.linphone.org,
+    # which carry AAAA records FreeSWITCH would try and hang on. Pin the SRV targets (not just
+    # the domain) to IPv4 so getaddrinfo returns v4 only.
     extra_hosts:
       - "sip.linphone.org:176.31.149.179"
+      - "sip11.linphone.org:176.31.149.179"
+      - "sip12.linphone.org:5.135.215.43"
     cap_add:
       - NET_ADMIN
       - SYS_NICE
