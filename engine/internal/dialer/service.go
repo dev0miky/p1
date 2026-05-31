@@ -21,6 +21,7 @@ import (
 	"p1/engine/internal/dnc"
 	"p1/engine/internal/esl"
 	"p1/engine/internal/fsm"
+	"p1/engine/internal/gateway"
 	"p1/engine/internal/lead"
 )
 
@@ -29,6 +30,7 @@ type Config struct {
 	ESL              *esl.Client
 	NodeID           string
 	GatewayName      string
+	GatewayRepo      *gateway.Repo
 	ForceDest        string
 	TestPlayback     string
 	SoundRoot        string
@@ -48,10 +50,12 @@ type Service struct {
 	dnc      *dnc.Repo
 	pre      *compliance.Preflight
 	logger   *slog.Logger
+	gwRepo   *gateway.Repo
 
-	mu       sync.Mutex
-	uuidLead map[string]int64
-	uuidTen  map[string]int64
+	mu            sync.Mutex
+	uuidLead      map[string]int64
+	uuidTen       map[string]int64
+	activeGateway string
 }
 
 func New(cfg Config) *Service {
@@ -77,17 +81,23 @@ func New(cfg Config) *Service {
 		cfg.SoundRoot = "/data/sounds"
 	}
 	dncRepo := dnc.NewRepo()
+	gwRepo := cfg.GatewayRepo
+	if gwRepo == nil {
+		gwRepo = gateway.NewRepo("")
+	}
 	return &Service{
-		cfg:      cfg,
-		campaign: campaign.NewRepo(),
-		lead:     lead.NewRepo(),
-		fsm:      fsm.NewRepo(),
-		cid:      callerid.NewRepo(),
-		dnc:      dncRepo,
-		pre:      compliance.New(dncRepo),
-		logger:   cfg.Logger,
-		uuidLead: make(map[string]int64),
-		uuidTen:  make(map[string]int64),
+		cfg:           cfg,
+		campaign:      campaign.NewRepo(),
+		lead:          lead.NewRepo(),
+		fsm:           fsm.NewRepo(),
+		cid:           callerid.NewRepo(),
+		dnc:           dncRepo,
+		pre:           compliance.New(dncRepo),
+		logger:        cfg.Logger,
+		gwRepo:        gwRepo,
+		uuidLead:      make(map[string]int64),
+		uuidTen:       make(map[string]int64),
+		activeGateway: cfg.GatewayName,
 	}
 }
 
@@ -129,7 +139,25 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 }
 
+func (s *Service) resolveGateway(ctx context.Context) {
+	var name string
+	if err := db.WithCtx(ctx, s.cfg.Pool, db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
+		var err error
+		name, err = s.gwRepo.ActiveNameTx(ctx, tx)
+		return err
+	}); err != nil {
+		s.logger.Warn("gateway resolve failed, keeping previous", "err", err)
+		return
+	}
+	if name == "" {
+		name = s.cfg.GatewayName
+	}
+	s.activeGateway = name
+}
+
 func (s *Service) tick(ctx context.Context) {
+	s.resolveGateway(ctx)
+
 	var campaigns []campaign.Campaign
 	if err := db.WithCtx(ctx, s.cfg.Pool, db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
 		var err error
@@ -294,7 +322,7 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 	octx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	jobUUID, err := s.cfg.ESL.Originate(octx, esl.OriginateParams{
 		Vars:    vars,
-		Gateway: s.cfg.GatewayName,
+		Gateway: s.activeGateway,
 		Dest:    dest,
 		Action:  action,
 	})
@@ -530,13 +558,13 @@ func (s *Service) soundPath(tenantID int64, fileKey string) string {
 }
 
 // bridgeDialString turns a bare agent target (a number or extension) into a
-// full FreeSWITCH dial-string via the configured gateway. A target that already
+// full FreeSWITCH dial-string via the active gateway. A target that already
 // contains "/" (e.g. sofia/gateway/foo/+1..., user/1001) is used verbatim.
 func (s *Service) bridgeDialString(target string) string {
 	if strings.Contains(target, "/") {
 		return target
 	}
-	return "sofia/gateway/" + s.cfg.GatewayName + "/" + target
+	return "sofia/gateway/" + s.activeGateway + "/" + target
 }
 
 func resolveBridgeTarget(sc *campaign.AttachedScript) string {

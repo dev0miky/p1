@@ -14,6 +14,7 @@ import (
 	"p1/engine/internal/config"
 	"p1/engine/internal/dialer"
 	"p1/engine/internal/esl"
+	gw "p1/engine/internal/gateway"
 )
 
 func main() {
@@ -56,11 +57,13 @@ func run() error {
 	}
 	defer client.Close()
 
+	gwEncKey := os.Getenv("GATEWAY_ENC_KEY")
 	svc := dialer.New(dialer.Config{
 		Pool:         pool,
 		ESL:          client,
 		NodeID:       nodeID,
 		GatewayName:  gateway,
+		GatewayRepo:  gw.NewRepo(gwEncKey),
 		ForceDest:    forceDest,
 		TestPlayback: testPlayback,
 		Logger:       logger,
