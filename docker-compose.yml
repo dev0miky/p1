@@ -124,7 +124,7 @@ services:
       - "sip.linphone.org:176.31.149.179"
     entrypoint: >
       /bin/sh -c "
-      printf '<include><X-PRE-PROCESS cmd=\"set\" data=\"fs_xml_curl_secret=%s\"/></include>' \"$$FS_XML_CURL_SECRET\" > /etc/freeswitch/env_vars.xml &&
+      printf '<X-PRE-PROCESS cmd=\"set\" data=\"fs_xml_curl_secret=%s\"/>' \"$$FS_XML_CURL_SECRET\" > /etc/freeswitch/env_vars.xml &&
       exec /docker-entrypoint.sh
       "
     environment:
