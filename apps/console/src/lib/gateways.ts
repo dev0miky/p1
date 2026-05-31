@@ -12,6 +12,7 @@ export interface Gateway {
   from_user?: string;
   from_domain?: string;
   transport: string;
+  media_encryption: string;
   expire_seconds?: number;
   retry_seconds?: number;
   caller_id_in_from?: boolean;
@@ -35,6 +36,7 @@ export interface GatewayInput {
   from_user?: string;
   from_domain?: string;
   transport?: string;
+  media_encryption?: string;
   expire_seconds?: number;
   retry_seconds?: number;
   caller_id_in_from?: boolean;

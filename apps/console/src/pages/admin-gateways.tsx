@@ -72,6 +72,14 @@ function StatusBadge({ status }: { status: RegisterStatus }) {
 const TRANSPORTS = ["udp", "tcp", "tls"] as const;
 type Transport = (typeof TRANSPORTS)[number];
 
+const MEDIA_ENCRYPTIONS = ["none", "srtp"] as const;
+type MediaEncryption = (typeof MEDIA_ENCRYPTIONS)[number];
+
+const MEDIA_ENCRYPTION_LABELS: Record<MediaEncryption, string> = {
+  none: "None",
+  srtp: "SRTP (mandatory)",
+};
+
 export function AdminGatewaysPage() {
   const token = useAuth((s) => s.token);
   const qc = useQueryClient();
@@ -413,6 +421,7 @@ function GatewayModal({ mode, open, gateway, onClose, onSaved, token }: GatewayM
   const [fromUser, setFromUser] = useState("");
   const [fromDomain, setFromDomain] = useState("");
   const [transport, setTransport] = useState<Transport>("udp");
+  const [mediaEncryption, setMediaEncryption] = useState<MediaEncryption>("none");
   const [expireSeconds, setExpireSeconds] = useState("3600");
   const [retrySeconds, setRetrySeconds] = useState("30");
   const [callerIdInFrom, setCallerIdInFrom] = useState(false);
@@ -435,6 +444,7 @@ function GatewayModal({ mode, open, gateway, onClose, onSaved, token }: GatewayM
       setFromUser(gateway.from_user ?? "");
       setFromDomain(gateway.from_domain ?? "");
       setTransport((gateway.transport as Transport) ?? "udp");
+      setMediaEncryption((gateway.media_encryption as MediaEncryption) ?? "none");
       setExpireSeconds(String(gateway.expire_seconds ?? 3600));
       setRetrySeconds(String(gateway.retry_seconds ?? 30));
       setCallerIdInFrom(gateway.caller_id_in_from ?? false);
@@ -452,6 +462,7 @@ function GatewayModal({ mode, open, gateway, onClose, onSaved, token }: GatewayM
       setFromUser("");
       setFromDomain("");
       setTransport("udp");
+      setMediaEncryption("none");
       setExpireSeconds("3600");
       setRetrySeconds("30");
       setCallerIdInFrom(false);
@@ -471,6 +482,7 @@ function GatewayModal({ mode, open, gateway, onClose, onSaved, token }: GatewayM
       proxy,
       register,
       transport,
+      media_encryption: mediaEncryption,
       enabled,
       caller_id_in_from: callerIdInFrom,
     };
@@ -560,24 +572,46 @@ function GatewayModal({ mode, open, gateway, onClose, onSaved, token }: GatewayM
           />
         </div>
 
-        <div>
-          <Label>Transport</Label>
-          <div className="mt-2 grid grid-cols-3 gap-px bg-ink-400 border border-ink-400">
-            {TRANSPORTS.map((t) => (
-              <button
-                type="button"
-                key={t}
-                onClick={() => setTransport(t)}
-                className={clsx(
-                  "px-3 h-10 font-mono text-2xs uppercase tracking-widest transition-colors",
-                  transport === t
-                    ? "bg-phosphor text-ink-0"
-                    : "bg-ink-100 text-ink-800 hover:bg-ink-200 hover:text-ink-950",
-                )}
-              >
-                {t}
-              </button>
-            ))}
+        <div className="grid grid-cols-2 gap-5">
+          <div>
+            <Label>Transport</Label>
+            <div className="mt-2 grid grid-cols-3 gap-px bg-ink-400 border border-ink-400">
+              {TRANSPORTS.map((t) => (
+                <button
+                  type="button"
+                  key={t}
+                  onClick={() => setTransport(t)}
+                  className={clsx(
+                    "px-3 h-10 font-mono text-2xs uppercase tracking-widest transition-colors",
+                    transport === t
+                      ? "bg-phosphor text-ink-0"
+                      : "bg-ink-100 text-ink-800 hover:bg-ink-200 hover:text-ink-950",
+                  )}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <Label hint="SRTP required for linphone.org">Media encryption</Label>
+            <div className="mt-2 grid grid-cols-2 gap-px bg-ink-400 border border-ink-400">
+              {MEDIA_ENCRYPTIONS.map((enc) => (
+                <button
+                  type="button"
+                  key={enc}
+                  onClick={() => setMediaEncryption(enc)}
+                  className={clsx(
+                    "px-3 h-10 font-mono text-2xs uppercase tracking-widest transition-colors",
+                    mediaEncryption === enc
+                      ? "bg-phosphor text-ink-0"
+                      : "bg-ink-100 text-ink-800 hover:bg-ink-200 hover:text-ink-950",
+                  )}
+                >
+                  {MEDIA_ENCRYPTION_LABELS[enc]}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

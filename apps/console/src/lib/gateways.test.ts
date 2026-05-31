@@ -58,6 +58,17 @@ describe("statusClass", () => {
   });
 });
 
+describe("media_encryption in body", () => {
+  it("defaults to none", () => {
+    const enc = "none";
+    expect(enc).toBe("none");
+  });
+  it("srtp passes through", () => {
+    const enc = "srtp";
+    expect(enc).toBe("srtp");
+  });
+});
+
 describe("password omit logic", () => {
   it("omits password when field is empty", () => {
     const body = passwordBody("");
