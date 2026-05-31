@@ -16,6 +16,7 @@ volumes:
   sounds-data:
   imports-data:
   recordings-data:
+  fsgw:
 
 services:
   postgres:
@@ -122,13 +123,6 @@ services:
     # doesn't pick their AAAA record and hang. (TLS SNI/realm stay the hostname.)
     extra_hosts:
       - "sip.linphone.org:176.31.149.179"
-    entrypoint: >
-      /bin/sh -c "
-      printf '<X-PRE-PROCESS cmd=\"set\" data=\"fs_xml_curl_secret=%s\"/>' \"$$FS_XML_CURL_SECRET\" > /etc/freeswitch/env_vars.xml &&
-      exec /docker-entrypoint.sh
-      "
-    environment:
-      FS_XML_CURL_SECRET: ${FS_XML_CURL_SECRET}
     cap_add:
       - NET_ADMIN
       - SYS_NICE
@@ -142,6 +136,7 @@ services:
       - ./deploy/freeswitch/vars.xml:/etc/freeswitch/vars.xml:ro
       - ./deploy/freeswitch/autoload_configs:/etc/freeswitch/autoload_configs:ro
       - ./deploy/freeswitch/sip_profiles:/etc/freeswitch/sip_profiles:ro
+      - fsgw:/etc/freeswitch/sip_profiles/external
       - ./deploy/freeswitch/dialplan:/etc/freeswitch/dialplan:ro
       - ./deploy/freeswitch/scripts:/usr/share/freeswitch/scripts:ro
       - sounds-data:/data/sounds:ro
@@ -253,11 +248,12 @@ services:
       SOUND_STORAGE_DIR: /data/sounds
       IMPORT_STORAGE_DIR: /data/imports
       GATEWAY_ENC_KEY: ${GATEWAY_ENC_KEY}
-      FS_XML_CURL_SECRET: ${FS_XML_CURL_SECRET}
+      GATEWAY_DIR: /fsgw
       LOG_LEVEL: ${LOG_LEVEL}
     volumes:
       - sounds-data:/data/sounds
       - imports-data:/data/imports
+      - fsgw:/fsgw
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks: [app]
