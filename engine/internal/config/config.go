@@ -33,7 +33,7 @@ type Config struct {
 	ESLAddr       string
 	ESLPassword   string
 	GatewayEncKey string
-	FSXMLSecret   string
+	GatewayDir    string
 }
 
 func Load() (Config, error) {
@@ -89,7 +89,7 @@ func Load() (Config, error) {
 	c.ESLAddr = eslHost + ":" + eslPort
 	c.ESLPassword = getEnv("FREESWITCH_ESL_PASSWORD", "ClueCon")
 	c.GatewayEncKey = os.Getenv("GATEWAY_ENC_KEY")
-	c.FSXMLSecret = os.Getenv("FS_XML_CURL_SECRET")
+	c.GatewayDir = getEnv("GATEWAY_DIR", "/fsgw")
 
 	return c, nil
 }

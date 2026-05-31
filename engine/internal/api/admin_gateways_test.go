@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -276,85 +275,6 @@ func TestGatewayCreateRegisterTrueWithoutUsernameReturns400(t *testing.T) {
 	}
 }
 
-func TestFSXMLWrongSecretReturns401(t *testing.T) {
-	s := newStack(t)
-
-	req := httptest.NewRequest("POST", "/fs/xml", strings.NewReader("section=configuration&key_value=sofia.conf"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.SetBasicAuth("freeswitch", "wrong-secret")
-	w := httptest.NewRecorder()
-	s.router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong secret: want 401, got %d", w.Code)
-	}
-}
-
-func TestFSXMLMissingSecretReturns401(t *testing.T) {
-	s := newStack(t)
-
-	req := httptest.NewRequest("POST", "/fs/xml", strings.NewReader("section=configuration&key_value=sofia.conf"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	w := httptest.NewRecorder()
-	s.router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("missing secret: want 401, got %d", w.Code)
-	}
-}
-
-func TestFSXMLWithCorrectSecretAndEnabledGateway(t *testing.T) {
-	s := newStack(t)
-	tok := s.tokenFor(t, 1, 0, "super_admin")
-
-	s.do(t, "POST", "/admin/gateways/", tok, map[string]any{
-		"name":     "fsxml-gw",
-		"proxy":    "sip.carrier.example.com",
-		"username": "user1",
-		"password": "pw1",
-		"enabled":  true,
-	})
-
-	req := httptest.NewRequest("POST", "/fs/xml", strings.NewReader("section=configuration&key_value=sofia.conf"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.SetBasicAuth("freeswitch", testFSXMLSecret)
-	w := httptest.NewRecorder()
-	s.router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
-	}
-	ct := w.Header().Get("Content-Type")
-	if !strings.Contains(ct, "text/xml") {
-		t.Fatalf("want text/xml content-type, got %q", ct)
-	}
-	body := w.Body.String()
-	if !strings.Contains(body, "<gateway") {
-		t.Fatalf("expected <gateway in response body, got:\n%s", body)
-	}
-	if !strings.Contains(body, "fsxml-gw") {
-		t.Fatalf("expected gateway name in body, got:\n%s", body)
-	}
-}
-
-func TestFSXMLUnknownKeyValueReturnsNotFound(t *testing.T) {
-	s := newStack(t)
-
-	req := httptest.NewRequest("POST", "/fs/xml", strings.NewReader("section=configuration&key_value=something.conf"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.SetBasicAuth("freeswitch", testFSXMLSecret)
-	w := httptest.NewRecorder()
-	s.router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200 (NotFound doc), got %d", w.Code)
-	}
-	body := w.Body.String()
-	if !strings.Contains(body, "not found") {
-		t.Fatalf("expected not-found document, got:\n%s", body)
-	}
-}
-
 func TestGatewayListWithoutAuthReturns401(t *testing.T) {
 	s := newStack(t)
 	w := s.do(t, "GET", "/admin/gateways/", "", nil)
@@ -373,20 +293,6 @@ func TestGatewayRegisterWithNilProvisionerReturns503(t *testing.T) {
 	w := s.do(t, "POST", "/admin/gateways/"+id+"/register", tok, nil)
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("want 503, got %d body=%s", w.Code, w.Body.String())
-	}
-}
-
-func TestFSXMLViaXFSSecretHeader(t *testing.T) {
-	s := newStack(t)
-
-	req := httptest.NewRequest("POST", "/fs/xml", strings.NewReader("section=configuration&key_value=sofia.conf"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("X-FS-Secret", testFSXMLSecret)
-	w := httptest.NewRecorder()
-	s.router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("X-FS-Secret header: want 200, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 
@@ -430,39 +336,6 @@ func TestGatewayInvalidMediaEncryptionReturns400(t *testing.T) {
 	}
 }
 
-func TestFSXMLUDPSrtpGatewayHasBothParams(t *testing.T) {
-	s := newStack(t)
-	tok := s.tokenFor(t, 1, 0, "super_admin")
-
-	s.do(t, "POST", "/admin/gateways/", tok, map[string]any{
-		"name":             "udp-srtp-gw",
-		"proxy":            "sip.linphone.org",
-		"register":         true,
-		"username":         "linuser",
-		"password":         "linpw",
-		"transport":        "udp",
-		"media_encryption": "srtp",
-		"enabled":          true,
-	})
-
-	req := httptest.NewRequest("POST", "/fs/xml", strings.NewReader("section=configuration&key_value=sofia.conf"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.SetBasicAuth("freeswitch", testFSXMLSecret)
-	w := httptest.NewRecorder()
-	s.router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
-	}
-	body := w.Body.String()
-	if !strings.Contains(body, `<param name="register-transport" value="udp"/>`) {
-		t.Errorf("missing register-transport=udp in /fs/xml\nbody:\n%s", body)
-	}
-	if !strings.Contains(body, `<variable name="rtp_secure_media" value="mandatory:AES_CM_128_HMAC_SHA1_80"/>`) {
-		t.Errorf("missing rtp_secure_media in /fs/xml\nbody:\n%s", body)
-	}
-}
-
 func TestGatewayCreateDefaultsEnabledAndActivates(t *testing.T) {
 	s := newStack(t)
 	tok := s.tokenFor(t, 1, 0, "super_admin")
@@ -487,5 +360,66 @@ func TestGatewayCreateDefaultsEnabledAndActivates(t *testing.T) {
 	w = s.do(t, "POST", "/admin/gateways/"+itoa(int64(id))+"/activate", tok, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("activate a default-enabled gateway: want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestGatewayDisableActiveAutoDeactivates(t *testing.T) {
+	s := newStack(t)
+	tok := s.tokenFor(t, 1, 0, "super_admin")
+
+	gw := makeGW(t, s, "disable-active-api")
+	id := itoa(int64(gw["id"].(float64)))
+
+	w := s.do(t, "POST", "/admin/gateways/"+id+"/activate", tok, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("activate: want 200, got %d", w.Code)
+	}
+
+	w = s.do(t, "PATCH", "/admin/gateways/"+id, tok, map[string]any{"enabled": false})
+	if w.Code != http.StatusOK {
+		t.Fatalf("disable active gateway: want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	w = s.do(t, "GET", "/admin/gateways/"+id, tok, nil)
+	var got map[string]any
+	json.Unmarshal(w.Body.Bytes(), &got)
+	if got["enabled"] != false {
+		t.Fatalf("enabled: got %v want false", got["enabled"])
+	}
+	if got["is_active"] != false {
+		t.Fatalf("is_active: got %v want false after disable", got["is_active"])
+	}
+}
+
+func TestGatewayDisableAndVerifyViaDB(t *testing.T) {
+	s := newStack(t)
+	tok := s.tokenFor(t, 1, 0, "super_admin")
+
+	gw := makeGW(t, s, "disable-db-check")
+	gwID := int64(gw["id"].(float64))
+	id := itoa(gwID)
+
+	s.do(t, "POST", "/admin/gateways/"+id+"/activate", tok, nil)
+
+	w := s.do(t, "PATCH", "/admin/gateways/"+id, tok, map[string]any{"enabled": false})
+	if w.Code != http.StatusOK {
+		t.Fatalf("disable: want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	ctx := context.Background()
+	if err := db.WithCtx(ctx, s.pool, db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
+		g, err := s.gwRepo.GetTx(ctx, tx, gwID)
+		if err != nil {
+			return err
+		}
+		if g.Enabled {
+			t.Fatal("DB: enabled should be false")
+		}
+		if g.IsActive {
+			t.Fatal("DB: is_active should be false")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("db check: %v", err)
 	}
 }

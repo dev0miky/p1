@@ -107,8 +107,11 @@ func serve(cfg config.Config, logger *slog.Logger) error {
 	if err != nil {
 		logger.Warn("esl connect failed; gateway reload/status disabled", "err", err)
 	} else {
-		prov = gateway.NewProvisioner(eslClient)
+		prov = gateway.NewProvisioner(eslClient, cfg.GatewayDir)
 		go gateway.RunStatusTicker(ctx, pool, gwRepo, prov, logger)
+		if err := gateway.SyncAll(ctx, pool, gwRepo, prov); err != nil {
+			logger.Warn("gateway syncall at startup failed", "err", err)
+		}
 	}
 
 	handler := api.NewRouter(api.Config{
@@ -123,7 +126,6 @@ func serve(cfg config.Config, logger *slog.Logger) error {
 		GatewayRepo:    gwRepo,
 		Pool:           pool,
 		Provisioner:    prov,
-		FSXMLSecret:    cfg.FSXMLSecret,
 	})
 
 	srv := &http.Server{

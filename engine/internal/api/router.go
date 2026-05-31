@@ -37,7 +37,6 @@ type Config struct {
 	GatewayRepo    *gateway.Repo
 	Pool           *db.Pool
 	Provisioner    *gateway.Provisioner
-	FSXMLSecret    string
 }
 
 func NewRouter(cfg Config) http.Handler {
@@ -284,10 +283,6 @@ func NewRouter(cfg Config) http.Handler {
 		r.Post("/{id}/activate", adminGW.activate)
 		r.Post("/{id}/register", adminGW.register)
 	})
-
-	fsx := &fsXML{repo: cfg.GatewayRepo, pool: cfg.Pool, secret: cfg.FSXMLSecret}
-	r.Post("/fs/xml", fsx.handle)
-	r.Get("/fs/xml", fsx.handle)
 
 	return r
 }

@@ -20,8 +20,6 @@ import (
 	"p1/engine/internal/testutil"
 )
 
-const testFSXMLSecret = "test-fs-secret"
-
 type stack struct {
 	router http.Handler
 	iss    *auth.Issuer
@@ -50,7 +48,6 @@ func newStack(t *testing.T) stack {
 		ImportRunner:  leadimport.NewRunner(pool, importStorage, logger),
 		GatewayRepo:   gwRepo,
 		Pool:          pool,
-		FSXMLSecret:   testFSXMLSecret,
 	})
 	return stack{router: router, iss: iss, repo: repo, gwRepo: gwRepo, pool: pool}
 }

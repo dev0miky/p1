@@ -164,6 +164,7 @@ func (r *Repo) UpdateTx(ctx context.Context, tx pgx.Tx, id int64, p UpdatePatch)
 		  caller_id_in_from = COALESCE($12, caller_id_in_from),
 		  extra_params      = COALESCE($13, extra_params),
 		  enabled           = COALESCE($15, enabled),
+		  is_active         = CASE WHEN $15::bool = false THEN false ELSE is_active END,
 		  media_encryption  = COALESCE(NULLIF($17,''), media_encryption),
 		  updated_at        = now()
 		WHERE id=$16

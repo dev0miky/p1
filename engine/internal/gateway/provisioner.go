@@ -2,9 +2,17 @@ package gateway
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+
+	"p1/engine/internal/db"
 	"p1/engine/internal/esl"
+	"p1/engine/internal/fsxml"
 )
 
 func ReloadCommands(name string) [2]string {
@@ -46,9 +54,60 @@ func normalizeSofiaState(s string) string {
 	}
 }
 
-type Provisioner struct{ esl *esl.Client }
+func ToView(g Gateway) fsxml.GatewayView {
+	v := fsxml.GatewayView{
+		Proxy:           g.Proxy,
+		Name:            g.Name,
+		Register:        g.Register,
+		Transport:       string(g.Transport),
+		MediaEncryption: g.MediaEncryption,
+		CallerIDInFrom:  g.CallerIDInFrom,
+		ExpireSeconds:   g.ExpireSeconds,
+		RetrySeconds:    g.RetrySeconds,
+		Extra:           g.ExtraParams,
+	}
+	if g.Username != nil {
+		v.Username = *g.Username
+	}
+	if g.Password != nil {
+		v.Password = *g.Password
+	}
+	if g.Realm != nil {
+		v.Realm = *g.Realm
+	}
+	if g.FromUser != nil {
+		v.FromUser = *g.FromUser
+	}
+	if g.FromDomain != nil {
+		v.FromDomain = *g.FromDomain
+	}
+	return v
+}
 
-func NewProvisioner(c *esl.Client) *Provisioner { return &Provisioner{esl: c} }
+type Provisioner struct {
+	esl        *esl.Client
+	gatewayDir string
+}
+
+func NewProvisioner(c *esl.Client, gatewayDir string) *Provisioner {
+	return &Provisioner{esl: c, gatewayDir: gatewayDir}
+}
+
+func (p *Provisioner) writeFile(view fsxml.GatewayView) error {
+	xml, err := fsxml.RenderGatewayFile(view)
+	if err != nil {
+		return fmt.Errorf("render gateway file: %w", err)
+	}
+	dest := filepath.Join(p.gatewayDir, view.Name+".xml")
+	tmp := dest + ".tmp"
+	if err := os.WriteFile(tmp, []byte(xml), 0644); err != nil {
+		return fmt.Errorf("write gateway tmp file: %w", err)
+	}
+	if err := os.Rename(tmp, dest); err != nil {
+		return fmt.Errorf("rename gateway file: %w", err)
+	}
+	return nil
+}
 
 func (p *Provisioner) Reload(ctx context.Context, name string) error {
 	for _, cmd := range ReloadCommands(name) {
@@ -59,10 +118,48 @@ func (p *Provisioner) Reload(ctx context.Context, name string) error {
 	return nil
 }
 
+func (p *Provisioner) Sync(ctx context.Context, view fsxml.GatewayView) error {
+	if err := p.writeFile(view); err != nil {
+		return err
+	}
+	return p.Reload(ctx, view.Name)
+}
+
+func (p *Provisioner) Remove(ctx context.Context, name string) error {
+	path := filepath.Join(p.gatewayDir, name+".xml")
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove gateway file: %w", err)
+	}
+	return p.Reload(ctx, name)
+}
+
 func (p *Provisioner) Status(ctx context.Context, name string) (string, error) {
 	out, err := p.esl.API(ctx, "sofia status gateway "+name)
 	if err != nil {
 		return "", err
 	}
 	return ParseRegisterStatus(out), nil
+}
+
+func SyncAll(ctx context.Context, pool *db.Pool, repo *Repo, prov *Provisioner) error {
+	var gws []Gateway
+	if err := db.WithCtx(ctx, pool, db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
+		var err error
+		gws, err = repo.ListEnabledWithSecretTx(ctx, tx)
+		return err
+	}); err != nil {
+		return fmt.Errorf("list enabled gateways: %w", err)
+	}
+	for _, g := range gws {
+		if err := prov.writeFile(ToView(g)); err != nil {
+			return fmt.Errorf("sync gateway %q: %w", g.Name, err)
+		}
+	}
+	// single rescan after all files are written
+	if len(gws) > 0 {
+		if _, err := prov.esl.API(ctx, "sofia profile external rescan"); err != nil {
+			return fmt.Errorf("rescan: %w", err)
+		}
+	}
+	return nil
 }

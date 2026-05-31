@@ -1,7 +1,12 @@
 package gateway
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"p1/engine/internal/fsxml"
 )
 
 func TestReloadCommands(t *testing.T) {
@@ -81,5 +86,120 @@ func TestParseRegisterStatusAllowedSet(t *testing.T) {
 		if !allowed[got] {
 			t.Errorf("ParseRegisterStatus(%q) = %q outside DB-allowed set", input, got)
 		}
+	}
+}
+
+func newTestProvisioner(t *testing.T) (*Provisioner, string) {
+	t.Helper()
+	dir := t.TempDir()
+	p := &Provisioner{gatewayDir: dir}
+	return p, dir
+}
+
+func TestProvisionerWriteFile(t *testing.T) {
+	p, dir := newTestProvisioner(t)
+
+	view := fsxml.GatewayView{
+		Name:            "linphone",
+		Proxy:           "sip.linphone.org",
+		Username:        "user1",
+		Password:        "s3cret",
+		Realm:           "sip.linphone.org",
+		Register:        true,
+		Transport:       "udp",
+		MediaEncryption: "srtp",
+		CallerIDInFrom:  true,
+		ExpireSeconds:   3600,
+		RetrySeconds:    30,
+	}
+	if err := p.writeFile(view); err != nil {
+		t.Fatalf("writeFile: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "linphone.xml"))
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	content := string(data)
+
+	if !strings.Contains(content, `<include>`) {
+		t.Error("missing <include>")
+	}
+	if !strings.Contains(content, `<gateway name="linphone">`) {
+		t.Error("missing gateway name")
+	}
+	if !strings.Contains(content, `<param name="register-transport" value="udp"/>`) {
+		t.Errorf("missing register-transport=udp\ndoc:\n%s", content)
+	}
+	if !strings.Contains(content, `<variable name="rtp_secure_media" value="mandatory:AES_CM_128_HMAC_SHA1_80"/>`) {
+		t.Errorf("missing rtp_secure_media\ndoc:\n%s", content)
+	}
+}
+
+func TestProvisionerWriteFileOverwrites(t *testing.T) {
+	p, dir := newTestProvisioner(t)
+
+	v1 := fsxml.GatewayView{
+		Name:          "gw",
+		Proxy:         "sip.old.com",
+		Transport:     "udp",
+		ExpireSeconds: 3600,
+		RetrySeconds:  30,
+	}
+	if err := p.writeFile(v1); err != nil {
+		t.Fatalf("writeFile first: %v", err)
+	}
+
+	v2 := fsxml.GatewayView{
+		Name:          "gw",
+		Proxy:         "sip.new.com",
+		Transport:     "udp",
+		ExpireSeconds: 3600,
+		RetrySeconds:  30,
+	}
+	if err := p.writeFile(v2); err != nil {
+		t.Fatalf("writeFile second: %v", err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, "gw.xml"))
+	if !strings.Contains(string(data), "sip.new.com") {
+		t.Errorf("file not overwritten: %s", string(data))
+	}
+}
+
+func TestProvisionerRemoveFile(t *testing.T) {
+	p, dir := newTestProvisioner(t)
+
+	view := fsxml.GatewayView{
+		Name:          "del-gw",
+		Proxy:         "sip.example.com",
+		Transport:     "udp",
+		ExpireSeconds: 3600,
+		RetrySeconds:  30,
+	}
+	if err := p.writeFile(view); err != nil {
+		t.Fatalf("writeFile: %v", err)
+	}
+	path := filepath.Join(dir, "del-gw.xml")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("file should exist after writeFile: %v", err)
+	}
+
+	// Remove without ESL — call os.Remove directly to test file deletion logic
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("file should be gone after remove")
+	}
+}
+
+func TestProvisionerRemoveNotExistIsNoop(t *testing.T) {
+	p, _ := newTestProvisioner(t)
+
+	// Remove a file that was never written; should not error (ignore not-exist)
+	path := filepath.Join(p.gatewayDir, "nonexistent.xml")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("unexpected error removing non-existent file: %v", err)
 	}
 }

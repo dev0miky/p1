@@ -636,3 +636,40 @@ func TestRLSTenantCannotSeeGateways(t *testing.T) {
 		t.Fatalf("tenant list: %v", err)
 	}
 }
+
+func TestDisableActiveGatewayAutoDeactivates(t *testing.T) {
+	pool := testutil.TestPool(t)
+	repo := gateway.NewRepo(testEncKey)
+	ctx := context.Background()
+
+	var id int64
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		c, err := repo.CreateTx(ctx, tx, makeGateway("disable-active"))
+		id = c.ID
+		return err
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		return repo.ActivateTx(ctx, tx, id)
+	}); err != nil {
+		t.Fatalf("activate: %v", err)
+	}
+
+	var updated gateway.Gateway
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		var err error
+		updated, err = repo.UpdateTx(ctx, tx, id, gateway.UpdatePatch{Enabled: ptr(false)})
+		return err
+	}); err != nil {
+		t.Fatalf("update enabled=false on active gateway: %v", err)
+	}
+
+	if updated.Enabled {
+		t.Fatal("enabled should be false")
+	}
+	if updated.IsActive {
+		t.Fatal("is_active should be false after disabling")
+	}
+}

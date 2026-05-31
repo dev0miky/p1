@@ -198,8 +198,17 @@ func (a *adminGateways) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if a.prov != nil {
-		if err := a.prov.Reload(r.Context(), created.Name); err != nil {
-			a.log.Error("provisioner reload after create", "gateway", created.Name, "err", err)
+		var full gateway.Gateway
+		if err := db.WithCtx(r.Context(), a.pool, db.Ctx{Role: claims.Role}, func(tx pgx.Tx) error {
+			var err error
+			full, err = a.repo.GetWithSecretTx(r.Context(), tx, created.ID)
+			return err
+		}); err == nil {
+			if err := a.prov.Sync(r.Context(), gateway.ToView(full)); err != nil {
+				a.log.Error("provisioner sync after create", "gateway", created.Name, "err", err)
+			}
+		} else {
+			a.log.Error("get-with-secret after create", "gateway", created.Name, "err", err)
 		}
 	}
 
@@ -357,8 +366,17 @@ func (a *adminGateways) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if a.prov != nil {
-		if err := a.prov.Reload(r.Context(), after.Name); err != nil {
-			a.log.Error("provisioner reload after update", "gateway", after.Name, "err", err)
+		var full gateway.Gateway
+		if err := db.WithCtx(r.Context(), a.pool, db.Ctx{Role: claims.Role}, func(tx pgx.Tx) error {
+			var err error
+			full, err = a.repo.GetWithSecretTx(r.Context(), tx, id)
+			return err
+		}); err == nil {
+			if err := a.prov.Sync(r.Context(), gateway.ToView(full)); err != nil {
+				a.log.Error("provisioner sync after update", "gateway", after.Name, "err", err)
+			}
+		} else {
+			a.log.Error("get-with-secret after update", "gateway", after.Name, "err", err)
 		}
 	}
 
@@ -405,8 +423,8 @@ func (a *adminGateways) delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if a.prov != nil {
-		if err := a.prov.Reload(r.Context(), name); err != nil {
-			a.log.Error("provisioner reload after delete", "gateway", name, "err", err)
+		if err := a.prov.Remove(r.Context(), name); err != nil {
+			a.log.Error("provisioner remove after delete", "gateway", name, "err", err)
 		}
 	}
 
@@ -444,6 +462,20 @@ func (a *adminGateways) activate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "activate failed")
 		return
 	}
+
+	if a.prov != nil {
+		var g gateway.Gateway
+		if fetchErr := db.WithCtx(r.Context(), a.pool, db.Ctx{Role: claims.Role}, func(tx pgx.Tx) error {
+			var e error
+			g, e = a.repo.GetTx(r.Context(), tx, id)
+			return e
+		}); fetchErr == nil {
+			if reloadErr := a.prov.Reload(r.Context(), g.Name); reloadErr != nil {
+				a.log.Error("provisioner reload after activate", "gateway", g.Name, "err", reloadErr)
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{"activated": true})
 }
 
