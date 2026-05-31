@@ -69,6 +69,20 @@ describe("media_encryption in body", () => {
   });
 });
 
+describe("dial_prefix in body", () => {
+  function dialPrefixBody(prefix: string): { dial_prefix?: string } {
+    if (prefix) return { dial_prefix: prefix };
+    return {};
+  }
+
+  it("omits dial_prefix when empty", () => {
+    expect(dialPrefixBody("")).not.toHaveProperty("dial_prefix");
+  });
+  it("sends dial_prefix when set", () => {
+    expect(dialPrefixBody("777").dial_prefix).toBe("777");
+  });
+});
+
 describe("password omit logic", () => {
   it("omits password when field is empty", () => {
     const body = passwordBody("");

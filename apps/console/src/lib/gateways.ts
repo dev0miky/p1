@@ -13,6 +13,7 @@ export interface Gateway {
   from_domain?: string;
   transport: string;
   media_encryption: string;
+  dial_prefix: string;
   expire_seconds?: number;
   retry_seconds?: number;
   caller_id_in_from?: boolean;
@@ -37,6 +38,7 @@ export interface GatewayInput {
   from_domain?: string;
   transport?: string;
   media_encryption?: string;
+  dial_prefix?: string;
   expire_seconds?: number;
   retry_seconds?: number;
   caller_id_in_from?: boolean;

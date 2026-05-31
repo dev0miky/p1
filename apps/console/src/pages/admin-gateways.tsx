@@ -425,6 +425,7 @@ function GatewayModal({ mode, open, gateway, onClose, onSaved, token }: GatewayM
   const [expireSeconds, setExpireSeconds] = useState("3600");
   const [retrySeconds, setRetrySeconds] = useState("30");
   const [callerIdInFrom, setCallerIdInFrom] = useState(false);
+  const [dialPrefix, setDialPrefix] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [extraParams, setExtraParams] = useState<KV[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -448,6 +449,7 @@ function GatewayModal({ mode, open, gateway, onClose, onSaved, token }: GatewayM
       setExpireSeconds(String(gateway.expire_seconds ?? 3600));
       setRetrySeconds(String(gateway.retry_seconds ?? 30));
       setCallerIdInFrom(gateway.caller_id_in_from ?? false);
+      setDialPrefix(gateway.dial_prefix ?? "");
       setEnabled(gateway.enabled ?? true);
       const ep = gateway.extra_params ?? {};
       setExtraParams(Object.entries(ep).map(([key, value]) => ({ id: nextKvId(), key, value: String(value) })));
@@ -466,6 +468,7 @@ function GatewayModal({ mode, open, gateway, onClose, onSaved, token }: GatewayM
       setExpireSeconds("3600");
       setRetrySeconds("30");
       setCallerIdInFrom(false);
+      setDialPrefix("");
       setEnabled(true);
       setExtraParams([]);
     }
@@ -492,6 +495,7 @@ function GatewayModal({ mode, open, gateway, onClose, onSaved, token }: GatewayM
     if (realm) body.realm = realm;
     if (fromUser) body.from_user = fromUser;
     if (fromDomain) body.from_domain = fromDomain;
+    if (dialPrefix) body.dial_prefix = dialPrefix;
     const exp = parseInt(expireSeconds, 10);
     if (!isNaN(exp) && exp > 0) body.expire_seconds = exp;
     const ret = parseInt(retrySeconds, 10);
@@ -665,6 +669,15 @@ function GatewayModal({ mode, open, gateway, onClose, onSaved, token }: GatewayM
         )}
 
         <div className="grid grid-cols-2 gap-5">
+          <div>
+            <Label hint="optional routing prefix, e.g. 777">Dial prefix</Label>
+            <Input
+              value={dialPrefix}
+              onChange={(e) => setDialPrefix(e.target.value)}
+              className="font-mono"
+              placeholder="777"
+            />
+          </div>
           <div>
             <Label hint="optional">From user</Label>
             <Input
