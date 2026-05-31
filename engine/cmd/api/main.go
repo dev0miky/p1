@@ -17,6 +17,8 @@ import (
 	"p1/engine/internal/auth"
 	"p1/engine/internal/config"
 	"p1/engine/internal/db"
+	"p1/engine/internal/esl"
+	"p1/engine/internal/gateway"
 	"p1/engine/internal/leadimport"
 	"p1/engine/internal/recording"
 	"p1/engine/internal/sound"
@@ -98,6 +100,17 @@ func serve(cfg config.Config, logger *slog.Logger) error {
 		}
 	}
 
+	gwRepo := gateway.NewRepo(cfg.GatewayEncKey)
+
+	var prov *gateway.Provisioner
+	eslClient, err := esl.Dial(ctx, cfg.ESLAddr, cfg.ESLPassword, logger)
+	if err != nil {
+		logger.Warn("esl connect failed; gateway reload/status disabled", "err", err)
+	} else {
+		prov = gateway.NewProvisioner(eslClient)
+		go gateway.RunStatusTicker(ctx, pool, gwRepo, prov, logger)
+	}
+
 	handler := api.NewRouter(api.Config{
 		Repo:           repo,
 		Issuer:         iss,
@@ -107,6 +120,10 @@ func serve(cfg config.Config, logger *slog.Logger) error {
 		ImportStorage:  importStorage,
 		ImportRunner:   importRunner,
 		RecordingStore: recStore,
+		GatewayRepo:    gwRepo,
+		Pool:           pool,
+		Provisioner:    prov,
+		FSXMLSecret:    cfg.FSXMLSecret,
 	})
 
 	srv := &http.Server{
