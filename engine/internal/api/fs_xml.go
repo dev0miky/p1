@@ -37,7 +37,7 @@ func (f *fsXML) handle(w http.ResponseWriter, r *http.Request) {
 
 	if err := r.ParseForm(); err != nil {
 		w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-		w.Write([]byte(fsxml.NotFound()))
+		_, _ = w.Write([]byte(fsxml.NotFound()))
 		return
 	}
 
@@ -46,7 +46,7 @@ func (f *fsXML) handle(w http.ResponseWriter, r *http.Request) {
 
 	if section != "configuration" || keyValue != "sofia.conf" {
 		w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-		w.Write([]byte(fsxml.NotFound()))
+		_, _ = w.Write([]byte(fsxml.NotFound()))
 		return
 	}
 
@@ -59,7 +59,7 @@ func (f *fsXML) handle(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-		w.Write([]byte(fsxml.NotFound()))
+		_, _ = w.Write([]byte(fsxml.NotFound()))
 		return
 	}
 
@@ -96,10 +96,10 @@ func (f *fsXML) handle(w http.ResponseWriter, r *http.Request) {
 	out, err := fsxml.RenderSofia(views)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-		w.Write([]byte(fsxml.NotFound()))
+		_, _ = w.Write([]byte(fsxml.NotFound()))
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-	w.Write([]byte(out))
+	_, _ = w.Write([]byte(out))
 }

@@ -69,4 +69,3 @@ func TestResolveGatewayFallsBackWhenNoneActive(t *testing.T) {
 		t.Errorf("expected loopback fallback, got %q", got)
 	}
 }
-
