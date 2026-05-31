@@ -15,11 +15,10 @@ import (
 	"p1/engine/internal/fsxml"
 )
 
-func ReloadCommands(name string) [2]string {
-	return [2]string{
-		"sofia profile external killgw " + name,
-		"sofia profile external rescan",
-	}
+// full profile restart is the only reliable reload for changed gateway include files;
+// killgw+rescan leaves stale state when a file was modified in place.
+func ReloadCommands(_ string) []string {
+	return []string{"sofia profile external restart reloadxml"}
 }
 
 func ParseRegisterStatus(eslOutput string) string {

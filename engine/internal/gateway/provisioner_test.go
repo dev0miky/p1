@@ -11,11 +11,8 @@ import (
 
 func TestReloadCommands(t *testing.T) {
 	cmds := ReloadCommands("linphone")
-	want := [2]string{
-		"sofia profile external killgw linphone",
-		"sofia profile external rescan",
-	}
-	if cmds != want {
+	want := []string{"sofia profile external restart reloadxml"}
+	if len(cmds) != len(want) || cmds[0] != want[0] {
 		t.Fatalf("got %v, want %v", cmds, want)
 	}
 }

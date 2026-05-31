@@ -336,6 +336,58 @@ func TestGatewayInvalidMediaEncryptionReturns400(t *testing.T) {
 	}
 }
 
+func TestGatewayCreateWithDialPrefix(t *testing.T) {
+	s := newStack(t)
+	tok := s.tokenFor(t, 1, 0, "super_admin")
+
+	w := s.do(t, "POST", "/admin/gateways/", tok, map[string]any{
+		"name":        "prefix-gw",
+		"proxy":       "sip.carrier.example.com",
+		"dial_prefix": "777",
+		"enabled":     true,
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d body=%s", w.Code, w.Body.String())
+	}
+	var got map[string]any
+	json.Unmarshal(w.Body.Bytes(), &got)
+	if got["dial_prefix"] != "777" {
+		t.Fatalf("dial_prefix: got %v want 777", got["dial_prefix"])
+	}
+}
+
+func TestGatewayUpdateDialPrefix(t *testing.T) {
+	s := newStack(t)
+	tok := s.tokenFor(t, 1, 0, "super_admin")
+
+	gw := makeGW(t, s, "prefix-upd-api")
+	id := itoa(int64(gw["id"].(float64)))
+
+	w := s.do(t, "PATCH", "/admin/gateways/"+id, tok, map[string]any{
+		"dial_prefix": "9",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("patch: want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	var got map[string]any
+	json.Unmarshal(w.Body.Bytes(), &got)
+	if got["dial_prefix"] != "9" {
+		t.Fatalf("dial_prefix after update: got %v want 9", got["dial_prefix"])
+	}
+
+	// clear it
+	w = s.do(t, "PATCH", "/admin/gateways/"+id, tok, map[string]any{
+		"dial_prefix": "",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("clear: want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	json.Unmarshal(w.Body.Bytes(), &got)
+	if got["dial_prefix"] != "" {
+		t.Fatalf("dial_prefix after clear: got %v want empty", got["dial_prefix"])
+	}
+}
+
 func TestGatewayCreateDefaultsEnabledAndActivates(t *testing.T) {
 	s := newStack(t)
 	tok := s.tokenFor(t, 1, 0, "super_admin")

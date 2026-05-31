@@ -373,28 +373,30 @@ func TestSetStatusTxNotFound(t *testing.T) {
 	}
 }
 
-func TestActiveNameTx(t *testing.T) {
+func TestActiveGatewayTx(t *testing.T) {
 	pool := testutil.TestPool(t)
 	repo := gateway.NewRepo(testEncKey)
 	ctx := context.Background()
 
 	// none active yet
 	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
-		name, err := repo.ActiveNameTx(ctx, tx)
+		name, prefix, err := repo.ActiveGatewayTx(ctx, tx)
 		if err != nil {
 			return err
 		}
-		if name != "" {
-			t.Fatalf("expected empty, got %q", name)
+		if name != "" || prefix != "" {
+			t.Fatalf("expected empty, got name=%q prefix=%q", name, prefix)
 		}
 		return nil
 	}); err != nil {
-		t.Fatalf("active name: %v", err)
+		t.Fatalf("active gateway: %v", err)
 	}
 
+	g := makeGateway("active-name")
+	g.DialPrefix = "777"
 	var id int64
 	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
-		c, err := repo.CreateTx(ctx, tx, makeGateway("active-name"))
+		c, err := repo.CreateTx(ctx, tx, g)
 		id = c.ID
 		return err
 	}); err != nil {
@@ -408,16 +410,125 @@ func TestActiveNameTx(t *testing.T) {
 	}
 
 	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
-		name, err := repo.ActiveNameTx(ctx, tx)
+		name, prefix, err := repo.ActiveGatewayTx(ctx, tx)
 		if err != nil {
 			return err
 		}
 		if name != "active-name" {
 			t.Fatalf("expected active-name, got %q", name)
 		}
+		if prefix != "777" {
+			t.Fatalf("expected prefix 777, got %q", prefix)
+		}
 		return nil
 	}); err != nil {
-		t.Fatalf("active name after activate: %v", err)
+		t.Fatalf("active gateway after activate: %v", err)
+	}
+}
+
+func TestDialPrefixRoundTrip(t *testing.T) {
+	pool := testutil.TestPool(t)
+	repo := gateway.NewRepo(testEncKey)
+	ctx := context.Background()
+
+	g := makeGateway("prefix-gw")
+	g.DialPrefix = "777"
+
+	var id int64
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		c, err := repo.CreateTx(ctx, tx, g)
+		id = c.ID
+		if c.DialPrefix != "777" {
+			t.Fatalf("create: dial_prefix got %q want 777", c.DialPrefix)
+		}
+		return err
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		fetched, err := repo.GetTx(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if fetched.DialPrefix != "777" {
+			t.Fatalf("get: dial_prefix got %q want 777", fetched.DialPrefix)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+}
+
+func TestDialPrefixUpdateAndClear(t *testing.T) {
+	pool := testutil.TestPool(t)
+	repo := gateway.NewRepo(testEncKey)
+	ctx := context.Background()
+
+	g := makeGateway("prefix-upd")
+	g.DialPrefix = "777"
+
+	var id int64
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		c, err := repo.CreateTx(ctx, tx, g)
+		id = c.ID
+		return err
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// update to new prefix
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		newPrefix := "9"
+		updated, err := repo.UpdateTx(ctx, tx, id, gateway.UpdatePatch{DialPrefix: &newPrefix})
+		if err != nil {
+			return err
+		}
+		if updated.DialPrefix != "9" {
+			t.Fatalf("update: dial_prefix got %q want 9", updated.DialPrefix)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("update prefix: %v", err)
+	}
+
+	// clear prefix by setting to ""
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		empty := ""
+		updated, err := repo.UpdateTx(ctx, tx, id, gateway.UpdatePatch{DialPrefix: &empty})
+		if err != nil {
+			return err
+		}
+		if updated.DialPrefix != "" {
+			t.Fatalf("clear: dial_prefix got %q want empty", updated.DialPrefix)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("clear prefix: %v", err)
+	}
+
+	// nil DialPrefix leaves existing value
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		// set back to 777 first
+		p := "777"
+		if _, err := repo.UpdateTx(ctx, tx, id, gateway.UpdatePatch{DialPrefix: &p}); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("reset prefix: %v", err)
+	}
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		updated, err := repo.UpdateTx(ctx, tx, id, gateway.UpdatePatch{Proxy: "sip.example.com"})
+		if err != nil {
+			return err
+		}
+		if updated.DialPrefix != "777" {
+			t.Fatalf("nil patch: dial_prefix got %q want 777", updated.DialPrefix)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("nil patch: %v", err)
 	}
 }
 

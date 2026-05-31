@@ -52,10 +52,11 @@ type Service struct {
 	logger   *slog.Logger
 	gwRepo   *gateway.Repo
 
-	mu            sync.Mutex
-	uuidLead      map[string]int64
-	uuidTen       map[string]int64
-	activeGateway string
+	mu                  sync.Mutex
+	uuidLead            map[string]int64
+	uuidTen             map[string]int64
+	activeGateway       string
+	activeGatewayPrefix string
 }
 
 func New(cfg Config) *Service {
@@ -140,10 +141,10 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) resolveGateway(ctx context.Context) {
-	var name string
+	var name, prefix string
 	if err := db.WithCtx(ctx, s.cfg.Pool, db.Ctx{Role: "super_admin"}, func(tx pgx.Tx) error {
 		var err error
-		name, err = s.gwRepo.ActiveNameTx(ctx, tx)
+		name, prefix, err = s.gwRepo.ActiveGatewayTx(ctx, tx)
 		return err
 	}); err != nil {
 		s.logger.Warn("gateway resolve failed, keeping previous", "err", err)
@@ -153,6 +154,7 @@ func (s *Service) resolveGateway(ctx context.Context) {
 		name = s.cfg.GatewayName
 	}
 	s.activeGateway = name
+	s.activeGatewayPrefix = prefix
 }
 
 func (s *Service) tick(ctx context.Context) {
@@ -323,7 +325,7 @@ func (s *Service) originate(ctx context.Context, c campaign.Campaign, l lead.Lea
 	jobUUID, err := s.cfg.ESL.Originate(octx, esl.OriginateParams{
 		Vars:    vars,
 		Gateway: s.activeGateway,
-		Dest:    dest,
+		Dest:    s.activeGatewayPrefix + dest,
 		Action:  action,
 	})
 	cancel()

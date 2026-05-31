@@ -35,6 +35,7 @@ type Gateway struct {
 	FromDomain       *string
 	Transport        Transport
 	MediaEncryption  string
+	DialPrefix       string
 	ExpireSeconds    int
 	RetrySeconds     int
 	CallerIDInFrom   bool

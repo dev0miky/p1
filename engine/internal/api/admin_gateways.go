@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -40,6 +41,7 @@ type gatewayResponse struct {
 	FromDomain       *string           `json:"from_domain"`
 	Transport        string            `json:"transport"`
 	MediaEncryption  string            `json:"media_encryption"`
+	DialPrefix       string            `json:"dial_prefix"`
 	ExpireSeconds    int               `json:"expire_seconds"`
 	RetrySeconds     int               `json:"retry_seconds"`
 	CallerIDInFrom   bool              `json:"caller_id_in_from"`
@@ -66,6 +68,7 @@ func toGatewayResponse(g gateway.Gateway) gatewayResponse {
 		FromDomain:      g.FromDomain,
 		Transport:       string(g.Transport),
 		MediaEncryption: g.MediaEncryption,
+		DialPrefix:      g.DialPrefix,
 		ExpireSeconds:   g.ExpireSeconds,
 		RetrySeconds:    g.RetrySeconds,
 		CallerIDInFrom:  g.CallerIDInFrom,
@@ -98,6 +101,7 @@ type createGatewayRequest struct {
 	FromDomain      *string           `json:"from_domain"`
 	Transport       string            `json:"transport"`
 	MediaEncryption string            `json:"media_encryption"`
+	DialPrefix      string            `json:"dial_prefix"`
 	ExpireSeconds   int               `json:"expire_seconds"`
 	RetrySeconds    int               `json:"retry_seconds"`
 	CallerIDInFrom  *bool             `json:"caller_id_in_from"`
@@ -162,6 +166,7 @@ func (a *adminGateways) create(w http.ResponseWriter, r *http.Request) {
 		FromDomain:      req.FromDomain,
 		Transport:       gateway.Transport(req.Transport),
 		MediaEncryption: req.MediaEncryption,
+		DialPrefix:      strings.TrimSpace(req.DialPrefix),
 		ExpireSeconds:   req.ExpireSeconds,
 		RetrySeconds:    req.RetrySeconds,
 		CallerIDInFrom:  callerIDInFrom,
@@ -269,6 +274,7 @@ type updateGatewayRequest struct {
 	FromDomain      *string           `json:"from_domain"`
 	Transport       string            `json:"transport"`
 	MediaEncryption *string           `json:"media_encryption"`
+	DialPrefix      *string           `json:"dial_prefix"`
 	ExpireSeconds   *int              `json:"expire_seconds"`
 	RetrySeconds    *int              `json:"retry_seconds"`
 	CallerIDInFrom  *bool             `json:"caller_id_in_from"`
@@ -320,6 +326,10 @@ func (a *adminGateways) update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.MediaEncryption != nil {
 		patch.MediaEncryption = *req.MediaEncryption
+	}
+	if req.DialPrefix != nil {
+		trimmed := strings.TrimSpace(*req.DialPrefix)
+		patch.DialPrefix = &trimmed
 	}
 	// only update password when explicitly provided as non-empty string
 	if req.Password != nil && *req.Password != "" {
