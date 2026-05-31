@@ -25,5 +25,10 @@
     <param name="auth-calls" value="false"/>
     <param name="apply-inbound-acl" value="domains"/>
     <param name="hold-music" value="$${hold_music}"/>
+    <param name="tls" value="true"/>
+    <param name="tls-only" value="false"/>
+    <param name="tls-sip-port" value="5061"/>
+    <param name="tls-bind-params" value="transport=tls"/>
+    <param name="tls-version" value="tlsv1.2,tlsv1.3"/>
   </settings>
 </profile>
