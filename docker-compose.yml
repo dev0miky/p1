@@ -230,6 +230,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # start after freeswitch so its first-mount copy of the shared gateway
+      # volume happens before our entrypoint chowns it (avoids a perms race)
+      freeswitch:
+        condition: service_started
     environment:
       PORT: "8080"
       DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
