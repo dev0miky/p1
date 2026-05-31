@@ -29,7 +29,9 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     deploy:
-      replicas: 2
+      # single replica: the loopback /fs/xml publish needs one host-port binder on
+      # a single box. API HA (multiple replicas behind a proxy) is a Phase-3 swarm concern.
+      replicas: 1
       resources:
         limits: { cpus: "2", memory: 1G }
 
