@@ -13,6 +13,7 @@ import { LeadsPage } from "@/pages/leads";
 import { DNCPage } from "@/pages/dnc";
 import { AdminTenantsPage } from "@/pages/admin-tenants";
 import { AdminUsersPage } from "@/pages/admin-users";
+import { AdminGatewaysPage } from "@/pages/admin-gateways";
 import { TenantUsersPage } from "@/pages/tenant-users";
 import { Placeholder } from "@/pages/placeholder";
 
@@ -108,6 +109,12 @@ const adminTenantsRoute = createRoute({
   component: AdminTenantsPage,
 });
 
+const adminGatewaysRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/gateways",
+  component: AdminGatewaysPage,
+});
+
 const adminCarriersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/admin/carriers",
@@ -141,6 +148,7 @@ const routeTree = rootRoute.addChildren([
   usersRoute,
   adminTenantsRoute,
   adminUsersRoute,
+  adminGatewaysRoute,
   adminCarriersRoute,
   adminDidsRoute,
   adminTracebackRoute,
