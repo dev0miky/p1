@@ -389,3 +389,30 @@ func TestFSXMLViaXFSSecretHeader(t *testing.T) {
 		t.Fatalf("X-FS-Secret header: want 200, got %d body=%s", w.Code, w.Body.String())
 	}
 }
+
+func TestGatewayCreateDefaultsEnabledAndActivates(t *testing.T) {
+	s := newStack(t)
+	tok := s.tokenFor(t, 1, 0, "super_admin")
+
+	w := s.do(t, "POST", "/admin/gateways/", tok, map[string]any{
+		"name":  "defaults-gw",
+		"proxy": "sip.carrier.example.com",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: want 201, got %d body=%s", w.Code, w.Body.String())
+	}
+	var got map[string]any
+	json.Unmarshal(w.Body.Bytes(), &got)
+	if got["enabled"] != true {
+		t.Fatalf("enabled should default true, got %v", got["enabled"])
+	}
+	if got["caller_id_in_from"] != true {
+		t.Fatalf("caller_id_in_from should default true, got %v", got["caller_id_in_from"])
+	}
+
+	id := int(got["id"].(float64))
+	w = s.do(t, "POST", "/admin/gateways/"+itoa(int64(id))+"/activate", tok, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("activate a default-enabled gateway: want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+}

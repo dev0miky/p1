@@ -97,9 +97,9 @@ type createGatewayRequest struct {
 	Transport      string            `json:"transport"`
 	ExpireSeconds  int               `json:"expire_seconds"`
 	RetrySeconds   int               `json:"retry_seconds"`
-	CallerIDInFrom bool              `json:"caller_id_in_from"`
+	CallerIDInFrom *bool             `json:"caller_id_in_from"`
 	ExtraParams    map[string]string `json:"extra_params"`
-	Enabled        bool              `json:"enabled"`
+	Enabled        *bool             `json:"enabled"`
 }
 
 func (a *adminGateways) create(w http.ResponseWriter, r *http.Request) {
@@ -136,6 +136,10 @@ func (a *adminGateways) create(w http.ResponseWriter, r *http.Request) {
 
 	claims, _ := auth.ClaimsFromContext(r.Context())
 
+	// enabled and caller-id-in-from default to true when omitted (match column defaults)
+	callerIDInFrom := req.CallerIDInFrom == nil || *req.CallerIDInFrom
+	enabled := req.Enabled == nil || *req.Enabled
+
 	g := gateway.Gateway{
 		Name:           req.Name,
 		Description:    req.Description,
@@ -149,9 +153,9 @@ func (a *adminGateways) create(w http.ResponseWriter, r *http.Request) {
 		Transport:      gateway.Transport(req.Transport),
 		ExpireSeconds:  req.ExpireSeconds,
 		RetrySeconds:   req.RetrySeconds,
-		CallerIDInFrom: req.CallerIDInFrom,
+		CallerIDInFrom: callerIDInFrom,
 		ExtraParams:    req.ExtraParams,
-		Enabled:        req.Enabled,
+		Enabled:        enabled,
 	}
 
 	var created gateway.Gateway
