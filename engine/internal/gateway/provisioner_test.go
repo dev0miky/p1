@@ -167,6 +167,28 @@ func TestProvisionerWriteFileOverwrites(t *testing.T) {
 	}
 }
 
+func TestProvisionerWriteFileMode(t *testing.T) {
+	p, dir := newTestProvisioner(t)
+
+	view := fsxml.GatewayView{
+		Name:          "mode-gw",
+		Proxy:         "sip.example.com",
+		Transport:     "udp",
+		ExpireSeconds: 3600,
+		RetrySeconds:  30,
+	}
+	if err := p.writeFile(view); err != nil {
+		t.Fatalf("writeFile: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(dir, "mode-gw.xml"))
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0600 {
+		t.Fatalf("file mode: got %04o, want 0600", got)
+	}
+}
+
 func TestProvisionerRemoveFile(t *testing.T) {
 	p, dir := newTestProvisioner(t)
 
@@ -185,21 +207,18 @@ func TestProvisionerRemoveFile(t *testing.T) {
 		t.Fatalf("file should exist after writeFile: %v", err)
 	}
 
-	// Remove without ESL — call os.Remove directly to test file deletion logic
-	if err := os.Remove(path); err != nil {
-		t.Fatalf("remove: %v", err)
+	if err := p.removeFile("del-gw"); err != nil {
+		t.Fatalf("removeFile: %v", err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatal("file should be gone after remove")
+		t.Fatal("file should be gone after removeFile")
 	}
 }
 
 func TestProvisionerRemoveNotExistIsNoop(t *testing.T) {
 	p, _ := newTestProvisioner(t)
 
-	// Remove a file that was never written; should not error (ignore not-exist)
-	path := filepath.Join(p.gatewayDir, "nonexistent.xml")
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		t.Fatalf("unexpected error removing non-existent file: %v", err)
+	if err := p.removeFile("nonexistent"); err != nil {
+		t.Fatalf("removeFile on missing file should be noop: %v", err)
 	}
 }

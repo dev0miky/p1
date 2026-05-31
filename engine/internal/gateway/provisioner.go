@@ -98,9 +98,12 @@ func (p *Provisioner) writeFile(view fsxml.GatewayView) error {
 	if err != nil {
 		return fmt.Errorf("render gateway file: %w", err)
 	}
+	if err := os.MkdirAll(p.gatewayDir, 0700); err != nil {
+		return fmt.Errorf("ensure gateway dir: %w", err)
+	}
 	dest := filepath.Join(p.gatewayDir, view.Name+".xml")
 	tmp := dest + ".tmp"
-	if err := os.WriteFile(tmp, []byte(xml), 0644); err != nil {
+	if err := os.WriteFile(tmp, []byte(xml), 0600); err != nil {
 		return fmt.Errorf("write gateway tmp file: %w", err)
 	}
 	if err := os.Rename(tmp, dest); err != nil {
@@ -125,10 +128,17 @@ func (p *Provisioner) Sync(ctx context.Context, view fsxml.GatewayView) error {
 	return p.Reload(ctx, view.Name)
 }
 
-func (p *Provisioner) Remove(ctx context.Context, name string) error {
+func (p *Provisioner) removeFile(name string) error {
 	path := filepath.Join(p.gatewayDir, name+".xml")
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove gateway file: %w", err)
+	}
+	return nil
+}
+
+func (p *Provisioner) Remove(ctx context.Context, name string) error {
+	if err := p.removeFile(name); err != nil {
+		return err
 	}
 	return p.Reload(ctx, name)
 }

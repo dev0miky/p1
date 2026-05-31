@@ -366,17 +366,23 @@ func (a *adminGateways) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if a.prov != nil {
-		var full gateway.Gateway
-		if err := db.WithCtx(r.Context(), a.pool, db.Ctx{Role: claims.Role}, func(tx pgx.Tx) error {
-			var err error
-			full, err = a.repo.GetWithSecretTx(r.Context(), tx, id)
-			return err
-		}); err == nil {
-			if err := a.prov.Sync(r.Context(), gateway.ToView(full)); err != nil {
-				a.log.Error("provisioner sync after update", "gateway", after.Name, "err", err)
+		if !after.Enabled {
+			if err := a.prov.Remove(r.Context(), after.Name); err != nil {
+				a.log.Error("provisioner remove after disable", "gateway", after.Name, "err", err)
 			}
 		} else {
-			a.log.Error("get-with-secret after update", "gateway", after.Name, "err", err)
+			var full gateway.Gateway
+			if err := db.WithCtx(r.Context(), a.pool, db.Ctx{Role: claims.Role}, func(tx pgx.Tx) error {
+				var err error
+				full, err = a.repo.GetWithSecretTx(r.Context(), tx, id)
+				return err
+			}); err == nil {
+				if err := a.prov.Sync(r.Context(), gateway.ToView(full)); err != nil {
+					a.log.Error("provisioner sync after update", "gateway", after.Name, "err", err)
+				}
+			} else {
+				a.log.Error("get-with-secret after update", "gateway", after.Name, "err", err)
+			}
 		}
 	}
 
