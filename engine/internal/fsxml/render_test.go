@@ -129,6 +129,78 @@ func TestRenderSofia_ZeroGateways(t *testing.T) {
 	}
 }
 
+func TestRenderSofia_UDPRegisterTransport(t *testing.T) {
+	gws := []fsxml.GatewayView{
+		{
+			Name:            "linphone-udp",
+			Proxy:           "sip.linphone.org",
+			Username:        "user1",
+			Password:        "secret",
+			Register:        true,
+			Transport:       "udp",
+			MediaEncryption: "srtp",
+			ExpireSeconds:   3600,
+			RetrySeconds:    30,
+		},
+	}
+	out := mustRender(t, gws)
+
+	if !strings.Contains(out, `<param name="register-transport" value="udp"/>`) {
+		t.Errorf("missing register-transport=udp\ndoc:\n%s", out)
+	}
+	if !strings.Contains(out, `<variable name="rtp_secure_media" value="mandatory:AES_CM_128_HMAC_SHA1_80"/>`) {
+		t.Errorf("missing rtp_secure_media variable\ndoc:\n%s", out)
+	}
+	if strings.Contains(out, ";transport=tls") {
+		t.Error("udp gateway must not have ;transport=tls in proxy")
+	}
+	mustParseXML(t, out)
+}
+
+func TestRenderSofia_NoneEncryptionEmitsNoVariable(t *testing.T) {
+	gws := []fsxml.GatewayView{
+		{
+			Name:            "plain-gw",
+			Proxy:           "sip.example.com",
+			Register:        true,
+			Transport:       "udp",
+			MediaEncryption: "none",
+			ExpireSeconds:   3600,
+			RetrySeconds:    30,
+		},
+	}
+	out := mustRender(t, gws)
+
+	if strings.Contains(out, "rtp_secure_media") {
+		t.Errorf("none encryption must not emit rtp_secure_media\ndoc:\n%s", out)
+	}
+	mustParseXML(t, out)
+}
+
+func TestRenderSofia_TLSStillGetsTransportSuffix(t *testing.T) {
+	gws := []fsxml.GatewayView{
+		{
+			Name:          "tls-gw",
+			Proxy:         "sip.linphone.org",
+			Username:      "user1",
+			Password:      "secret",
+			Register:      true,
+			Transport:     "tls",
+			ExpireSeconds: 3600,
+			RetrySeconds:  30,
+		},
+	}
+	out := mustRender(t, gws)
+
+	if !strings.Contains(out, `;transport=tls`) {
+		t.Error("tls gateway must have ;transport=tls in proxy")
+	}
+	if !strings.Contains(out, `<param name="register-transport" value="tls"/>`) {
+		t.Errorf("tls gateway must have register-transport=tls\ndoc:\n%s", out)
+	}
+	mustParseXML(t, out)
+}
+
 func TestNotFound(t *testing.T) {
 	out := fsxml.NotFound()
 	if !strings.Contains(out, `name="result"`) {

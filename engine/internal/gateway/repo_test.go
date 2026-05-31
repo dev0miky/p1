@@ -557,6 +557,57 @@ func TestErrNotFoundMapping(t *testing.T) {
 	}
 }
 
+func TestMediaEncryptionRoundTrip(t *testing.T) {
+	pool := testutil.TestPool(t)
+	repo := gateway.NewRepo(testEncKey)
+	ctx := context.Background()
+
+	g := makeGateway("media-enc-srtp")
+	g.MediaEncryption = "srtp"
+
+	var created gateway.Gateway
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		c, err := repo.CreateTx(ctx, tx, g)
+		created = c
+		return err
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if created.MediaEncryption != "srtp" {
+		t.Fatalf("media_encryption: got %q want srtp", created.MediaEncryption)
+	}
+
+	var fetched gateway.Gateway
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		g2, err := repo.GetTx(ctx, tx, created.ID)
+		fetched = g2
+		return err
+	}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if fetched.MediaEncryption != "srtp" {
+		t.Fatalf("fetched media_encryption: got %q want srtp", fetched.MediaEncryption)
+	}
+}
+
+func TestMediaEncryptionDefaultsNone(t *testing.T) {
+	pool := testutil.TestPool(t)
+	repo := gateway.NewRepo(testEncKey)
+	ctx := context.Background()
+
+	var created gateway.Gateway
+	if err := db.WithCtx(ctx, pool, superCtx(), func(tx pgx.Tx) error {
+		c, err := repo.CreateTx(ctx, tx, makeGateway("media-enc-default"))
+		created = c
+		return err
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if created.MediaEncryption != "none" {
+		t.Fatalf("default media_encryption: got %q want none", created.MediaEncryption)
+	}
+}
+
 func TestRLSTenantCannotSeeGateways(t *testing.T) {
 	pool := testutil.TestPool(t)
 	repo := gateway.NewRepo(testEncKey)

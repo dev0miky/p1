@@ -390,6 +390,79 @@ func TestFSXMLViaXFSSecretHeader(t *testing.T) {
 	}
 }
 
+func TestGatewayCreateWithMediaEncryptionSrtp(t *testing.T) {
+	s := newStack(t)
+	tok := s.tokenFor(t, 1, 0, "super_admin")
+
+	w := s.do(t, "POST", "/admin/gateways/", tok, map[string]any{
+		"name":             "srtp-gw",
+		"proxy":            "sip.linphone.org",
+		"register":         true,
+		"username":         "myuser",
+		"transport":        "udp",
+		"media_encryption": "srtp",
+		"enabled":          true,
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d body=%s", w.Code, w.Body.String())
+	}
+	var got map[string]any
+	json.Unmarshal(w.Body.Bytes(), &got)
+	if got["media_encryption"] != "srtp" {
+		t.Fatalf("media_encryption: got %v want srtp", got["media_encryption"])
+	}
+}
+
+func TestGatewayInvalidMediaEncryptionReturns400(t *testing.T) {
+	s := newStack(t)
+	tok := s.tokenFor(t, 1, 0, "super_admin")
+
+	w := s.do(t, "POST", "/admin/gateways/", tok, map[string]any{
+		"name":             "bad-enc-gw",
+		"proxy":            "sip.x.com",
+		"media_encryption": "dtls",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "media_encryption") {
+		t.Fatalf("expected media_encryption in error, got: %s", w.Body.String())
+	}
+}
+
+func TestFSXMLUDPSrtpGatewayHasBothParams(t *testing.T) {
+	s := newStack(t)
+	tok := s.tokenFor(t, 1, 0, "super_admin")
+
+	s.do(t, "POST", "/admin/gateways/", tok, map[string]any{
+		"name":             "udp-srtp-gw",
+		"proxy":            "sip.linphone.org",
+		"register":         true,
+		"username":         "linuser",
+		"password":         "linpw",
+		"transport":        "udp",
+		"media_encryption": "srtp",
+		"enabled":          true,
+	})
+
+	req := httptest.NewRequest("POST", "/fs/xml", strings.NewReader("section=configuration&key_value=sofia.conf"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("freeswitch", testFSXMLSecret)
+	w := httptest.NewRecorder()
+	s.router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `<param name="register-transport" value="udp"/>`) {
+		t.Errorf("missing register-transport=udp in /fs/xml\nbody:\n%s", body)
+	}
+	if !strings.Contains(body, `<variable name="rtp_secure_media" value="mandatory:AES_CM_128_HMAC_SHA1_80"/>`) {
+		t.Errorf("missing rtp_secure_media in /fs/xml\nbody:\n%s", body)
+	}
+}
+
 func TestGatewayCreateDefaultsEnabledAndActivates(t *testing.T) {
 	s := newStack(t)
 	tok := s.tokenFor(t, 1, 0, "super_admin")

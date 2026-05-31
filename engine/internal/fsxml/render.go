@@ -7,19 +7,20 @@ import (
 )
 
 type GatewayView struct {
-	Name           string
-	Proxy          string
-	Username       string
-	Password       string
-	Realm          string
-	FromUser       string
-	FromDomain     string
-	Transport      string
-	Register       bool
-	CallerIDInFrom bool
-	ExpireSeconds  int
-	RetrySeconds   int
-	Extra          map[string]string
+	Name            string
+	Proxy           string
+	Username        string
+	Password        string
+	Realm           string
+	FromUser        string
+	FromDomain      string
+	Transport       string
+	MediaEncryption string
+	Register        bool
+	CallerIDInFrom  bool
+	ExpireSeconds   int
+	RetrySeconds    int
+	Extra           map[string]string
 }
 
 func xmlEscape(s string) string {
@@ -101,14 +102,17 @@ var sofiaTemplate = template.Must(template.New("sofia").Funcs(template.FuncMap{
 {{- $isTLS := eq .Transport "tls"}}
               <param name="proxy" value="{{x .Proxy}}{{if $isTLS}};transport=tls{{end}}"/>
               <param name="register" value="{{boolStr .Register}}"/>
-{{- if and $isTLS .Register}}
-              <param name="register-transport" value="tls"/>
+{{- if .Register}}
+              <param name="register-transport" value="{{x .Transport}}"/>
 {{- end}}
               <param name="expire-seconds" value="{{.ExpireSeconds}}"/>
               <param name="retry-seconds" value="{{.RetrySeconds}}"/>
               <param name="caller-id-in-from" value="{{boolStr .CallerIDInFrom}}"/>
 {{- range $k, $v := .Extra}}
               <param name="{{x $k}}" value="{{x $v}}"/>
+{{- end}}
+{{- if eq .MediaEncryption "srtp"}}
+              <variable name="rtp_secure_media" value="mandatory:AES_CM_128_HMAC_SHA1_80"/>
 {{- end}}
             </gateway>
 {{- end}}

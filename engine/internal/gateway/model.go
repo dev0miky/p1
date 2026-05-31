@@ -34,6 +34,7 @@ type Gateway struct {
 	FromUser         *string
 	FromDomain       *string
 	Transport        Transport
+	MediaEncryption  string
 	ExpireSeconds    int
 	RetrySeconds     int
 	CallerIDInFrom   bool
@@ -44,6 +45,10 @@ type Gateway struct {
 	RegisterStatusAt *time.Time
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+}
+
+func ValidMediaEncryption(s string) bool {
+	return s == "none" || s == "srtp"
 }
 
 var ErrNotFound = errors.New("gateway not found")

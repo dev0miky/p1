@@ -66,14 +66,15 @@ func (f *fsXML) handle(w http.ResponseWriter, r *http.Request) {
 	views := make([]fsxml.GatewayView, 0, len(gws))
 	for _, g := range gws {
 		v := fsxml.GatewayView{
-			Name:           g.Name,
-			Proxy:          g.Proxy,
-			Register:       g.Register,
-			Transport:      string(g.Transport),
-			CallerIDInFrom: g.CallerIDInFrom,
-			ExpireSeconds:  g.ExpireSeconds,
-			RetrySeconds:   g.RetrySeconds,
-			Extra:          g.ExtraParams,
+			Name:            g.Name,
+			Proxy:           g.Proxy,
+			Register:        g.Register,
+			Transport:       string(g.Transport),
+			MediaEncryption: g.MediaEncryption,
+			CallerIDInFrom:  g.CallerIDInFrom,
+			ExpireSeconds:   g.ExpireSeconds,
+			RetrySeconds:    g.RetrySeconds,
+			Extra:           g.ExtraParams,
 		}
 		if g.Username != nil {
 			v.Username = *g.Username

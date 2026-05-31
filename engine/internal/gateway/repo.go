@@ -14,7 +14,7 @@ func NewRepo(encKey string) *Repo { return &Repo{encKey: encKey} }
 
 const cols = `id, name, description, proxy, register, username,
   (password_enc IS NOT NULL) AS has_password, realm, from_user, from_domain,
-  transport, expire_seconds, retry_seconds, caller_id_in_from, extra_params,
+  transport, media_encryption, expire_seconds, retry_seconds, caller_id_in_from, extra_params,
   enabled, is_active, register_status, register_status_at, created_at, updated_at`
 
 func scan(row pgx.Row, g *Gateway, extra ...any) error {
@@ -22,7 +22,7 @@ func scan(row pgx.Row, g *Gateway, extra ...any) error {
 	dest := []any{
 		&g.ID, &g.Name, &g.Description, &g.Proxy, &g.Register, &g.Username,
 		&g.HasPassword, &g.Realm, &g.FromUser, &g.FromDomain, &g.Transport,
-		&g.ExpireSeconds, &g.RetrySeconds, &g.CallerIDInFrom, &raw,
+		&g.MediaEncryption, &g.ExpireSeconds, &g.RetrySeconds, &g.CallerIDInFrom, &raw,
 		&g.Enabled, &g.IsActive, &g.RegisterStatus, &g.RegisterStatusAt,
 		&g.CreatedAt, &g.UpdatedAt,
 	}
@@ -41,19 +41,22 @@ func (r *Repo) CreateTx(ctx context.Context, tx pgx.Tx, g Gateway) (Gateway, err
 	if g.ExtraParams == nil {
 		g.ExtraParams = map[string]string{}
 	}
+	if g.MediaEncryption == "" {
+		g.MediaEncryption = "none"
+	}
 	extra, _ := json.Marshal(g.ExtraParams)
 	var out Gateway
 	row := tx.QueryRow(ctx, `
 		INSERT INTO gateways (name, description, proxy, register, username,
-		  password_enc, realm, from_user, from_domain, transport, expire_seconds,
-		  retry_seconds, caller_id_in_from, extra_params, enabled)
+		  password_enc, realm, from_user, from_domain, transport, media_encryption,
+		  expire_seconds, retry_seconds, caller_id_in_from, extra_params, enabled)
 		VALUES ($1,$2,$3,$4,$5,
 		  CASE WHEN $6::text IS NULL THEN NULL ELSE pgp_sym_encrypt($6, $15) END,
-		  $7,$8,$9,$10,$11,$12,$13,$14,$16)
+		  $7,$8,$9,$10,$16,$11,$12,$13,$14,$17)
 		RETURNING `+cols,
 		g.Name, g.Description, g.Proxy, g.Register, g.Username,
 		g.Password, g.Realm, g.FromUser, g.FromDomain, g.Transport,
-		g.ExpireSeconds, g.RetrySeconds, g.CallerIDInFrom, extra, r.encKey, g.Enabled,
+		g.ExpireSeconds, g.RetrySeconds, g.CallerIDInFrom, extra, r.encKey, g.MediaEncryption, g.Enabled,
 	)
 	return out, scan(row, &out)
 }
@@ -119,21 +122,22 @@ func (r *Repo) ListEnabledWithSecretTx(ctx context.Context, tx pgx.Tx) ([]Gatewa
 }
 
 type UpdatePatch struct {
-	Description    *string
-	Proxy          string
-	Register       *bool
-	Username       *string
-	Password       *string
-	Realm          *string
-	FromUser       *string
-	FromDomain     *string
-	Transport      string
-	ExpireSeconds  *int
-	RetrySeconds   *int
-	CallerIDInFrom *bool
-	ExtraParams    map[string]string
-	SetExtraParams bool
-	Enabled        *bool
+	Description     *string
+	Proxy           string
+	Register        *bool
+	Username        *string
+	Password        *string
+	Realm           *string
+	FromUser        *string
+	FromDomain      *string
+	Transport       string
+	MediaEncryption string
+	ExpireSeconds   *int
+	RetrySeconds    *int
+	CallerIDInFrom  *bool
+	ExtraParams     map[string]string
+	SetExtraParams  bool
+	Enabled         *bool
 }
 
 func (r *Repo) UpdateTx(ctx context.Context, tx pgx.Tx, id int64, p UpdatePatch) (Gateway, error) {
@@ -160,12 +164,13 @@ func (r *Repo) UpdateTx(ctx context.Context, tx pgx.Tx, id int64, p UpdatePatch)
 		  caller_id_in_from = COALESCE($12, caller_id_in_from),
 		  extra_params      = COALESCE($13, extra_params),
 		  enabled           = COALESCE($15, enabled),
+		  media_encryption  = COALESCE(NULLIF($17,''), media_encryption),
 		  updated_at        = now()
 		WHERE id=$16
 		RETURNING `+cols,
 		p.Description, p.Proxy, p.Register, p.Username, p.Password, p.Realm,
 		p.FromUser, p.FromDomain, p.Transport, p.ExpireSeconds, p.RetrySeconds,
-		p.CallerIDInFrom, extra, r.encKey, p.Enabled, id,
+		p.CallerIDInFrom, extra, r.encKey, p.Enabled, id, p.MediaEncryption,
 	)
 	err := scan(row, &out)
 	if errors.Is(err, pgx.ErrNoRows) {

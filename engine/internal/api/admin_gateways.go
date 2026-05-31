@@ -39,6 +39,7 @@ type gatewayResponse struct {
 	FromUser         *string           `json:"from_user"`
 	FromDomain       *string           `json:"from_domain"`
 	Transport        string            `json:"transport"`
+	MediaEncryption  string            `json:"media_encryption"`
 	ExpireSeconds    int               `json:"expire_seconds"`
 	RetrySeconds     int               `json:"retry_seconds"`
 	CallerIDInFrom   bool              `json:"caller_id_in_from"`
@@ -53,26 +54,27 @@ type gatewayResponse struct {
 
 func toGatewayResponse(g gateway.Gateway) gatewayResponse {
 	r := gatewayResponse{
-		ID:             g.ID,
-		Name:           g.Name,
-		Description:    g.Description,
-		Proxy:          g.Proxy,
-		Register:       g.Register,
-		Username:       g.Username,
-		HasPassword:    g.HasPassword,
-		Realm:          g.Realm,
-		FromUser:       g.FromUser,
-		FromDomain:     g.FromDomain,
-		Transport:      string(g.Transport),
-		ExpireSeconds:  g.ExpireSeconds,
-		RetrySeconds:   g.RetrySeconds,
-		CallerIDInFrom: g.CallerIDInFrom,
-		ExtraParams:    g.ExtraParams,
-		Enabled:        g.Enabled,
-		IsActive:       g.IsActive,
-		RegisterStatus: g.RegisterStatus,
-		CreatedAt:      g.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:      g.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ID:              g.ID,
+		Name:            g.Name,
+		Description:     g.Description,
+		Proxy:           g.Proxy,
+		Register:        g.Register,
+		Username:        g.Username,
+		HasPassword:     g.HasPassword,
+		Realm:           g.Realm,
+		FromUser:        g.FromUser,
+		FromDomain:      g.FromDomain,
+		Transport:       string(g.Transport),
+		MediaEncryption: g.MediaEncryption,
+		ExpireSeconds:   g.ExpireSeconds,
+		RetrySeconds:    g.RetrySeconds,
+		CallerIDInFrom:  g.CallerIDInFrom,
+		ExtraParams:     g.ExtraParams,
+		Enabled:         g.Enabled,
+		IsActive:        g.IsActive,
+		RegisterStatus:  g.RegisterStatus,
+		CreatedAt:       g.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:       g.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 	if g.RegisterStatusAt != nil {
 		s := g.RegisterStatusAt.Format("2006-01-02T15:04:05Z07:00")
@@ -85,21 +87,22 @@ func toGatewayResponse(g gateway.Gateway) gatewayResponse {
 }
 
 type createGatewayRequest struct {
-	Name           string            `json:"name"`
-	Description    *string           `json:"description"`
-	Proxy          string            `json:"proxy"`
-	Register       bool              `json:"register"`
-	Username       *string           `json:"username"`
-	Password       *string           `json:"password"`
-	Realm          *string           `json:"realm"`
-	FromUser       *string           `json:"from_user"`
-	FromDomain     *string           `json:"from_domain"`
-	Transport      string            `json:"transport"`
-	ExpireSeconds  int               `json:"expire_seconds"`
-	RetrySeconds   int               `json:"retry_seconds"`
-	CallerIDInFrom *bool             `json:"caller_id_in_from"`
-	ExtraParams    map[string]string `json:"extra_params"`
-	Enabled        *bool             `json:"enabled"`
+	Name            string            `json:"name"`
+	Description     *string           `json:"description"`
+	Proxy           string            `json:"proxy"`
+	Register        bool              `json:"register"`
+	Username        *string           `json:"username"`
+	Password        *string           `json:"password"`
+	Realm           *string           `json:"realm"`
+	FromUser        *string           `json:"from_user"`
+	FromDomain      *string           `json:"from_domain"`
+	Transport       string            `json:"transport"`
+	MediaEncryption string            `json:"media_encryption"`
+	ExpireSeconds   int               `json:"expire_seconds"`
+	RetrySeconds    int               `json:"retry_seconds"`
+	CallerIDInFrom  *bool             `json:"caller_id_in_from"`
+	ExtraParams     map[string]string `json:"extra_params"`
+	Enabled         *bool             `json:"enabled"`
 }
 
 func (a *adminGateways) create(w http.ResponseWriter, r *http.Request) {
@@ -123,6 +126,13 @@ func (a *adminGateways) create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "transport must be udp, tcp, or tls")
 		return
 	}
+	if req.MediaEncryption == "" {
+		req.MediaEncryption = "none"
+	}
+	if !gateway.ValidMediaEncryption(req.MediaEncryption) {
+		writeError(w, http.StatusBadRequest, "media_encryption must be none or srtp")
+		return
+	}
 	if req.ExpireSeconds <= 0 {
 		req.ExpireSeconds = 3600
 	}
@@ -141,21 +151,22 @@ func (a *adminGateways) create(w http.ResponseWriter, r *http.Request) {
 	enabled := req.Enabled == nil || *req.Enabled
 
 	g := gateway.Gateway{
-		Name:           req.Name,
-		Description:    req.Description,
-		Proxy:          req.Proxy,
-		Register:       req.Register,
-		Username:       req.Username,
-		Password:       req.Password,
-		Realm:          req.Realm,
-		FromUser:       req.FromUser,
-		FromDomain:     req.FromDomain,
-		Transport:      gateway.Transport(req.Transport),
-		ExpireSeconds:  req.ExpireSeconds,
-		RetrySeconds:   req.RetrySeconds,
-		CallerIDInFrom: callerIDInFrom,
-		ExtraParams:    req.ExtraParams,
-		Enabled:        enabled,
+		Name:            req.Name,
+		Description:     req.Description,
+		Proxy:           req.Proxy,
+		Register:        req.Register,
+		Username:        req.Username,
+		Password:        req.Password,
+		Realm:           req.Realm,
+		FromUser:        req.FromUser,
+		FromDomain:      req.FromDomain,
+		Transport:       gateway.Transport(req.Transport),
+		MediaEncryption: req.MediaEncryption,
+		ExpireSeconds:   req.ExpireSeconds,
+		RetrySeconds:    req.RetrySeconds,
+		CallerIDInFrom:  callerIDInFrom,
+		ExtraParams:     req.ExtraParams,
+		Enabled:         enabled,
 	}
 
 	var created gateway.Gateway
@@ -239,20 +250,21 @@ func (a *adminGateways) get(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateGatewayRequest struct {
-	Description    *string           `json:"description"`
-	Proxy          string            `json:"proxy"`
-	Register       *bool             `json:"register"`
-	Username       *string           `json:"username"`
-	Password       *string           `json:"password"`
-	Realm          *string           `json:"realm"`
-	FromUser       *string           `json:"from_user"`
-	FromDomain     *string           `json:"from_domain"`
-	Transport      string            `json:"transport"`
-	ExpireSeconds  *int              `json:"expire_seconds"`
-	RetrySeconds   *int              `json:"retry_seconds"`
-	CallerIDInFrom *bool             `json:"caller_id_in_from"`
-	ExtraParams    map[string]string `json:"extra_params"`
-	Enabled        *bool             `json:"enabled"`
+	Description     *string           `json:"description"`
+	Proxy           string            `json:"proxy"`
+	Register        *bool             `json:"register"`
+	Username        *string           `json:"username"`
+	Password        *string           `json:"password"`
+	Realm           *string           `json:"realm"`
+	FromUser        *string           `json:"from_user"`
+	FromDomain      *string           `json:"from_domain"`
+	Transport       string            `json:"transport"`
+	MediaEncryption *string           `json:"media_encryption"`
+	ExpireSeconds   *int              `json:"expire_seconds"`
+	RetrySeconds    *int              `json:"retry_seconds"`
+	CallerIDInFrom  *bool             `json:"caller_id_in_from"`
+	ExtraParams     map[string]string `json:"extra_params"`
+	Enabled         *bool             `json:"enabled"`
 }
 
 func (a *adminGateways) update(w http.ResponseWriter, r *http.Request) {
@@ -268,6 +280,10 @@ func (a *adminGateways) update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Transport != "" && !gateway.ValidTransport(req.Transport) {
 		writeError(w, http.StatusBadRequest, "transport must be udp, tcp, or tls")
+		return
+	}
+	if req.MediaEncryption != nil && !gateway.ValidMediaEncryption(*req.MediaEncryption) {
+		writeError(w, http.StatusBadRequest, "media_encryption must be none or srtp")
 		return
 	}
 	if req.ExpireSeconds != nil && *req.ExpireSeconds <= 0 {
@@ -292,6 +308,9 @@ func (a *adminGateways) update(w http.ResponseWriter, r *http.Request) {
 		RetrySeconds:   req.RetrySeconds,
 		CallerIDInFrom: req.CallerIDInFrom,
 		Enabled:        req.Enabled,
+	}
+	if req.MediaEncryption != nil {
+		patch.MediaEncryption = *req.MediaEncryption
 	}
 	// only update password when explicitly provided as non-empty string
 	if req.Password != nil && *req.Password != "" {
