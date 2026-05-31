@@ -299,7 +299,10 @@ function RowActions({
   );
 }
 
-type KV = { key: string; value: string };
+let _kvSeq = 0;
+function nextKvId() { return ++_kvSeq; }
+
+type KV = { id: number; key: string; value: string };
 
 function ExtraParamsEditor({
   value,
@@ -309,7 +312,7 @@ function ExtraParamsEditor({
   onChange: (v: KV[]) => void;
 }) {
   function add() {
-    onChange([...value, { key: "", value: "" }]);
+    onChange([...value, { id: nextKvId(), key: "", value: "" }]);
   }
   function remove(i: number) {
     onChange(value.filter((_, j) => j !== i));
@@ -322,7 +325,7 @@ function ExtraParamsEditor({
   return (
     <div className="space-y-2">
       {value.map((row, i) => (
-        <div key={i} className="flex items-center gap-2">
+        <div key={row.id} className="flex items-center gap-2">
           <Input
             value={row.key}
             onChange={(e) => update(i, "key", e.target.value)}
@@ -437,7 +440,7 @@ function GatewayModal({ mode, open, gateway, onClose, onSaved, token }: GatewayM
       setCallerIdInFrom(gateway.caller_id_in_from ?? false);
       setEnabled(gateway.enabled ?? true);
       const ep = gateway.extra_params ?? {};
-      setExtraParams(Object.entries(ep).map(([key, value]) => ({ key, value: String(value) })));
+      setExtraParams(Object.entries(ep).map(([key, value]) => ({ id: nextKvId(), key, value: String(value) })));
     } else {
       setName("");
       setDescription("");

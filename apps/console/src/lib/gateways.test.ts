@@ -25,7 +25,7 @@ function statusClass(s: RegisterStatus): string {
   }
 }
 
-function passwordBody(hasPassword: boolean, newPassword: string): { password?: string } {
+function passwordBody(newPassword: string): { password?: string } {
   if (newPassword) return { password: newPassword };
   return {};
 }
@@ -60,15 +60,15 @@ describe("statusClass", () => {
 
 describe("password omit logic", () => {
   it("omits password when field is empty", () => {
-    const body = passwordBody(true, "");
+    const body = passwordBody("");
     expect(body).not.toHaveProperty("password");
   });
   it("sends password when user typed a new one", () => {
-    const body = passwordBody(true, "newpass");
+    const body = passwordBody("newpass");
     expect(body.password).toBe("newpass");
   });
-  it("sends password on create even when no prior password", () => {
-    const body = passwordBody(false, "secret");
+  it("sends password on create", () => {
+    const body = passwordBody("secret");
     expect(body.password).toBe("secret");
   });
 });
