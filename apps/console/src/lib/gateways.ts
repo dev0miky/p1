@@ -46,10 +46,6 @@ export function listGateways(token: string): Promise<{ gateways: Gateway[] }> {
   return api("/admin/gateways", { token });
 }
 
-export function getGateway(token: string, id: number): Promise<Gateway> {
-  return api(`/admin/gateways/${id}`, { token });
-}
-
 export function createGateway(token: string, body: GatewayInput): Promise<Gateway> {
   return api("/admin/gateways", { method: "POST", token, body });
 }
@@ -60,10 +56,6 @@ export function updateGateway(token: string, id: number, body: GatewayInput): Pr
 
 export function deleteGateway(token: string, id: number): Promise<void> {
   return api(`/admin/gateways/${id}`, { method: "DELETE", token });
-}
-
-export function activateGateway(token: string, id: number): Promise<void> {
-  return api(`/admin/gateways/${id}/activate`, { method: "POST", token });
 }
 
 export function registerGateway(token: string, id: number): Promise<{ register_status: string }> {
